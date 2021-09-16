@@ -13,7 +13,7 @@ shopt -s extglob # expand wildcards
 
 usage() {
 cat << EOF
-Usage: project_regions -b BEDFILE -r REFERENCE_SPECIES -t TARGET_SPECIES [optional: -h HALF_LIFE_DISTANCE -N NTHREADS -o OUTDIR -T TARGET_BEDFILE -p PICKLED_PAIRWISE_AXTNETS -c DIRECT_ALIGNMENT_CHAIN -k KEEP_TMP_FOLDER]
+Usage: project_regions -b BEDFILE -r REFERENCE_SPECIES -t TARGET_SPECIES [optional: -h HALF_LIFE_DISTANCE -N NTHREADS -d DATA_DIR -o OUTDIR -T TARGET_BEDFILE -p PICKLED_PAIRWISE_AXTNETS -c DIRECT_ALIGNMENT_CHAIN -k KEEP_TMP_FOLDER]
 
 OPTIONS:
    -b BEDFILE				Path to bedfile with coordinates to project from the reference to the target species.
@@ -21,6 +21,7 @@ OPTIONS:
    -t TARGET_SPECIES			Target Species Build (e.g. mm39).
    -h HALF_LIFE_DISTANCE		Distance to anchor point at which the distance-score equals 0.5. Default: 10 kb.
    -N NTHREADS				Number of parallel threads to use
+   -d DATA_DIR				Path to data directory containing the alignment/pkl folder. Default: .
    -o OUTDIR				Path to output directory.
    -T TARGET_BEDFILE			Path to a bedfile with equivalent regions in the target species used for the classification of functional conservation.
       	  				For example, if you are projecting predicted enhancers from species A to species B, you can specify a bedfile with predicted enhancers in species B.
@@ -33,15 +34,17 @@ EOF
 
 # parse arguments
 half_life_distance=10000
+data_dir=$(realpath .)
 outdir=$(realpath .)
 nthreads=1
-while getopts ":b:r:t:h:N:o:T:p:c:kn" OPTION; do
+while getopts ":b:r:t:h:N:d:o:T:p:c:kn" OPTION; do
 	case $OPTION in
 		b) bedfile=$(realpath $OPTARG) ;;
 		r) reference=$OPTARG ;;
 		t) target=$OPTARG ;;
 		h) half_life_distance=$OPTARG ;;
 		N) nthreads=$OPTARG ;;
+		d) data_dir=$(realpath $OPTARG) ;;
 		o) outdir=$(realpath $OPTARG) ;;
 		T) target_bedfile=$(realpath $OPTARG) ;;
 		p) pwaln_pkl=$(realpath $OPTARG) ;;
@@ -61,18 +64,19 @@ if [ -z ${bedfile+x} ] || [ -z ${reference+x} ] || [ -z ${target+x} ]; then
 fi
 
 # if pwaln pkl was not passed, search existing based on reference and taret species
-aln_dir=/project/ipp-data/alignment/pkl
+aln_dir=$data_dir/alignment
+pkl_dir=$aln_dir/pkl
 if [ -z ${pwaln_pkl+x} ]; then
-	pwaln_pkl=$aln_dir/${reference}.${target}.pwaln.pkl
-	[[ ! -e $pwaln_pkl ]] && pwaln_pkl=$aln_dir/${target}.${reference}.pwaln.pkl
-	[[ ! -e $pwaln_pkl ]] && unset pwaln_pkl && echo -e "Did not find a collection of pairwise alignments for this species pair at /project/ipp-data/projection.\nCreate one with a given selection of bridging species using preprocess_wrapper.sh" && exit 1
+	pwaln_pkl=$pkl_dir/${reference}.${target}.pwaln.pkl
+	[[ ! -e $pwaln_pkl ]] && pwaln_pkl=$pkl_dir/${target}.${reference}.pwaln.pkl
+	[[ ! -e $pwaln_pkl ]] && unset pwaln_pkl && echo -e "Did not find a collection of pairwise alignments (.pkl file) for this species pair at $pkl_dir.\nCreate one with a given selection of bridging species using the scripts in compute_pwalns/ or specify the correct location of your data folder containing the alignment/pkl subfolders (-d)." && exit 1
 fi
 
 # if chain was not passed, search existing based on reference and target species
-chain_dir=/project/ipp-data/alignment/chain
+chain_dir=$aln_dir/chain
 if [ -z ${chain+x} ]; then
 	chain=$(echo $chain_dir/${reference}.${target}*all.pre.chain) # if multiple chains are present, take the netted *.all.pre.chain
-	[[ ! -e $chain ]] && chain_arr=($(eval echo $chain_dir/${reference}.${target}*chain)) && chain=${chain_arr[1]} # if no *.all.pre.chain is found, take the first of any other chain files that match the pattern
+	[[ ! -e $chain ]] && chain_arr=($(eval echo $chain_dir/${reference}.${target}*chain)) && chain=${chain_arr[0]} # if no *.all.pre.chain is found, take the first of any other chain files that match the pattern
 	[[ ! -e $chain ]] && echo -e "Chain file for the pairwise alignment of this species pair not found at ${chain_dir}.\nProvide one using the -c flag." && exit 1
 fi
 

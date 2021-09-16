@@ -12,21 +12,31 @@ input_regions = pd.read_csv(bedfile + '_centered', sep='\t', header=None, index_
 input_regions.columns = ['chrom','start','end']
 
 # read liftover projections
-liftover = pd.read_csv(liftover_projections, sep='\t', header=None, index_col=3, usecols=range(4))
-liftover.columns = ['chrom','start','end']
-liftover.insert(0, 'coords_ref', input_regions.loc[liftover.index].apply(lambda x: '%s:%s' %(x['chrom'], x['start']), axis=1))
-liftover.insert(1, 'coords_target', liftover.apply(lambda x: '%s:%s' %(x['chrom'], x['start']), axis=1))
-liftover.insert(2, 'score', 1)
-liftover = liftover.loc[:,['coords_ref', 'coords_target', 'score']]
+try:
+    liftover = pd.read_csv(liftover_projections, sep='\t', header=None, index_col=3, usecols=range(4))
+    liftover.columns = ['chrom','start','end']
+    liftover.insert(0, 'coords_ref', input_regions.loc[liftover.index].apply(lambda x: '%s:%s' %(x['chrom'], x['start']), axis=1))
+    liftover.insert(1, 'coords_target', liftover.apply(lambda x: '%s:%s' %(x['chrom'], x['start']), axis=1))
+    liftover.insert(2, 'score', 1)
+    liftover = liftover.loc[:,['coords_ref', 'coords_target', 'score']]
+except pd.errors.EmptyDataError:
+    liftover = pd.DataFrame(columns=['coords_ref', 'coords_target', 'score'])
 
 # read IPP projections
-proj = pd.read_csv(ipp_projections, sep='\t', index_col=0)
-proj = proj.loc[:,['coords_ref', 'coords_multi', 'score_multi']]
-proj.columns = ['coords_ref', 'coords_target', 'score']
+try:
+    proj = pd.read_csv(ipp_projections, sep='\t', index_col=0)
+    proj = proj.loc[:,['coords_ref', 'coords_multi', 'score_multi']]
+    proj.columns = ['coords_ref', 'coords_target', 'score']
+except pd.errors.EmptyDataError:
+    proj = pd.DataFrame(columns=['coords_ref', 'coords_target', 'score'])
+
+# read unmapped regions
 try:
     unmapped = pd.read_csv(ipp_unmapped, header=None)[0].values
 except pd.errors.EmptyDataError:
     unmapped = []
+
+# define order of regions from input and exclude unmapped regions
 order = [x for x in input_regions.index.values if x not in unmapped]
 
 # concatenate liftover and IPP projections to a table with all reference and target coordinates and scores

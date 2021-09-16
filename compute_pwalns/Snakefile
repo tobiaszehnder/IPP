@@ -1,0 +1,178 @@
+import os
+
+# parse config dict entries to variables, e.g. a = d['a']. (data_dir, species_list)
+data_dir = os.path.abspath('../ipp_data')
+for k,v in config.items():
+    exec(k + '=v')
+       
+# define directories
+assembly_dir = data_dir + '/assembly'
+alignment_dir = data_dir + '/alignment'
+fasta_dir = data_dir + '/fasta'
+lastdb_dir = alignment_dir + '/lastdb'
+axtnet_dir = alignment_dir + '/axtNet'
+axt_dir = alignment_dir + '/axt'
+chain_dir = alignment_dir + '/chain'
+maf_dir = alignment_dir + '/maf'
+net_dir = alignment_dir + '/net'
+psl_dir = alignment_dir + '/psl'
+tbl_dir = alignment_dir + '/tbl'
+bed_dir = alignment_dir + '/bed'
+pkl_dir = alignment_dir + '/pkl'
+
+# make directories
+for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_dir, chain_dir, maf_dir, net_dir, psl_dir, tbl_dir, bed_dir, pkl_dir]:
+    if not os.path.exists(dr):
+        os.makedirs(dr)
+
+# define targets
+species_list=species_list.split(',')
+targets = [axtnet_dir + '/%s.%s.net.axt.gz' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
+if not pickle == False:
+    targets += ['%s/%s.pwaln.pkl' %(pkl_dir, pickle.replace(',','.'))] # pickle contains the ref-target species pair, e.g. danrer11,mm39
+
+### RULES ###
+
+rule all:
+    input:
+        targets
+
+rule pickle:
+    input:
+        [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
+    output:
+        '{pkl_dir}/{species_pair}.pwaln.pkl'
+    params:
+        missing_pwalns='missing_pwalns_forbidden'
+    shell:
+        'pickle_pwalns.py {output} {params} {input}'
+        
+rule axtnet_to_tbl:
+    input:
+        axtnet='%s/{s1}.{s2}.net.axt.gz' %axtnet_dir,
+        s2_sizes=ancient('%s/{s2}.sizes' %assembly_dir)
+    output:
+        '{tbl_dir}/{s1}.{s2}.tbl'
+    shell:
+        'axtnet_to_tbl.R {input} {output} > {output}.log'
+        
+rule gzip:
+    input:
+        ancient('{basename}.net.axt')
+    output:
+        '{basename}.net.axt.gz'
+    shell:
+        'gzip -1 -c {input} > {output}'
+
+rule axt_net:
+    # netToAxt fails with too high chain ids (can only handle up to 268435456). In such cases, save an empty output file instead.
+    input:
+        noclassnet=ancient('%s/{s1}.{s2}.noClass.net' %net_dir),
+        allprechain=ancient('%s/{s1}.{s2}.all.pre.chain' %chain_dir),
+        twobit_s1=ancient('%s/{s1}.2bit' %assembly_dir),
+        twobit_s2=ancient('%s/{s2}.2bit' %assembly_dir)
+    output:
+        temp('{axtnet_dir}/{s1}.{s2}.net.axt')
+    shell:
+        '''
+        netToAxt {input} {output} &> {output}.log || echo -e "" > {output}
+        '''
+
+rule no_class_net:
+    input:
+        allprechain=ancient('%s/{s1}.{s2}.all.pre.chain' %chain_dir),
+        sizes_s1=ancient('%s/{s1}.sizes' %assembly_dir),
+        sizes_s2=ancient('%s/{s2}.sizes' %assembly_dir)
+    output:
+        '{net_dir}/{s1}.{s2}.noClass.net'
+    shell:
+        'chainNet {input} stdout /dev/null | netSyntenic stdin {output}'
+
+rule all_pre_chain:
+    input:
+        allchain=ancient('{chain_dir}/{s1}.{s2}.all.chain'),
+        sizes_s1=ancient('%s/{s1}.sizes' %assembly_dir),
+        sizes_s2='%s/{s2}.sizes' %assembly_dir
+    output:
+        '{chain_dir}/{s1}.{s2}.all.pre.chain'
+    shell:
+        'chainPreNet {input} {output}'
+
+rule all_chain:
+    input:
+        axtchain=ancient('{basename}.axtChain')
+    output:
+        '{basename}.all.chain'
+    shell:
+        'chainMergeSort {input} > {output}'
+
+rule axt_chain:
+    input:
+        psl=ancient('%s/{s1}.{s2}.psl' %psl_dir),
+        twobit_s1=ancient('%s/{s1}.2bit' %assembly_dir),
+        twobit_s2=ancient('%s/{s2}.2bit' %assembly_dir)
+    output:
+        '{chain_dir}/{s1}.{s2}.axtChain'
+    shell:
+        'axtChain -psl -linearGap=loose {input} {output} &> {output}.log'
+        
+rule maf_to_psl:
+    input:
+        ancient('%s/{species_pair}.maf' %maf_dir)
+    output:
+        '{psl_dir}/{species_pair}.psl'
+    shell:
+        'maf-convert psl {input} > {output}'
+
+# lastal sometimes prepends the genome build as a prefix to the chromosome names (no idea why). replaces those occurrences.
+rule lastal_maf:
+    input:
+        prj=ancient('%s/{s1}.prj' %lastdb_dir),
+        fa=ancient('%s/{s2}.fa' %fasta_dir)
+    output:
+        '{maf_dir}/{s1}.{s2}.maf'
+    params:
+        lastdb_prefix='%s/{s1}' %lastdb_dir
+    threads:
+        min(workflow.cores, 30)
+    shell:
+        '''
+        /scratch/ngsvin/bin/Last/last-983/src/lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
+        remove_species_prefix {output}
+        '''
+
+rule lastdb_prj:
+    input:
+        ancient('%s/{species}.fa' %fasta_dir)
+    output:
+        '{lastdb_dir}/{species}.prj'
+    params:
+        prefix='{lastdb_dir}/{species}'
+    threads:
+        min(workflow.cores, 30)
+    shell:
+        '/scratch/ngsvin/bin/Last/last-983/src/lastdb -P {threads} -c {params.prefix} {input}'
+        
+rule twobit_to_sizes:
+    input:
+        ancient('{basename}.2bit')
+    output:
+        '{basename}.sizes'
+    shell:
+        'twoBitInfo {input} stdout | sort -k2rn > {output}'
+
+rule fa_to_twobit:
+    input:
+        ancient('%s/{species}.fa' %fasta_dir)
+    output:
+        '{assembly_dir}/{species}.2bit'
+    shell:
+        'faToTwoBit {input} {output}'
+    
+rule get_fasta:
+    output:
+        '{fasta_dir}/{species}.fa'
+    params:
+        link='http://hgdownload.cse.ucsc.edu/goldenpath/{species}/bigZips/{species}.fa.gz'
+    shell:
+        'wget -nc {params.link} -O /dev/stdout | gzip -d > {output}'

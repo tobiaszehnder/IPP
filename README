@@ -1,0 +1,27 @@
+### IPP - Independent Point Projection ###
+A tool for comparative genomics beyond alignable sequence
+
+
+-----------------
+## METHOD SUMMARY
+-----------------
+
+For a genomic region with conserved synteny, any non-alignable coordinate can be approximately projected from one genome to another by interpolating its relative position between two alignable anchor points.
+The accuracy of such interpolations negatively correlates with the distance of the anchor points. Therefore, projections between species with large evolutionary distances such as zebraﬁsh and mouse tend to be inaccurate due to a low anchor point density. Including so-called bridging species may increase the anchor point density and thus improve projection accuracy.
+The optimal choice and combination of bridging species may vary from one genomic location to another. This presents a shortest path problem in a graph where every node is a species and the weighted edges between nodes represent distances of genomic locations to their anchor points (|x - a|). To reﬂect those distances, we established a scoring function that exponentially decreases with increasing distances |x - a|. The shortest path problem is solved using Dijkstra’s Shortest Path Algorithm (Dijkstra, 1959).
+
+
+-----------
+## USAGE ##
+-----------
+
+download_ipp_data:
+	IPP uses a collection of pairwise alignments between the reference, target, and all bridging species stored in a serialized python object, a pickle.
+	These are large files stored separately from github and can be downloaded using this script.
+
+project_regions:
+	Project the regions of a bed-file from one genome to another.
+
+compute_alignments:
+	Use the scripts in this folder to compute pairwise alignments for your own set of species.
+

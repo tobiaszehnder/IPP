@@ -1,0 +1,72 @@
+#! /bin/bash
+
+usage() {
+cat << EOF
+Pipeline for computing pairwise alignments for all species pairs in a list of given species
+
+Usage: prun mdl ${0##*/} -s SPECIES [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
+
+required:
+	-s SPECIES		Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
+
+optional:
+	-p CREATE_PKL		Pass a comma-separated reference and target species for creating a pickle file with all pairwise alignments (pickled dictionary of data frames). Used as input for IPP. (E.g. danRer11,mm39)
+	-d DATA_DIR		Output directory. The script will create a predefined folder structure in that directory
+	   			(e.g. separate folders for alignment files, fasta files, etc.)
+	-f FORCE		Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
+	-@ NTHREADS		Number of parallel threads
+	-n DRY_RUN		Flag for a dry run, i.e. only print the commands instead of executing
+	-! SNAKEMAKE_ARGS	Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
+EOF
+}
+
+# parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
+pickle=False
+data_dir="/project/ipp-data"
+force="none"
+nthreads="--cores 1"
+snakefile="/project/ipp/bin/compute_pwalns/Snakefile"
+snakemake_args="-pr --rerun-incomplete"
+while getopts ":s:p:d:f:@:!:n" OPTION; do
+ 	case $OPTION in
+		s) species=$OPTARG ;;
+		p) pickle=$OPTARG ;;
+		d) data_dir=$(realpath $OPTARG) ;;
+		f) force=$OPTARG ;;
+		@) nthreads="--cores $OPTARG" ;;
+		n) nthreads="-nr" ;;
+		!) snakemake_args="$snakemake_args $OPTARG" ;;
+		?) usage; exit 1 ;;
+ 	esac
+done
+
+# throw error if not all mandatory arguments are passed
+if [ -z ${species+x} ]; then usage && exit 1; fi
+
+# define which rules to force run
+if [[ $force == "all" ]]; then
+	force_flag="--forceall"
+elif [[ $force == "none" ]]; then
+	force_flag=""
+else
+	force_flag="--forcerun $force"
+fi
+
+# read species file if one was passed
+[[ -e $species ]] && species_list=$(awk -vORS=, '/^[^#]/ {print $1}' species_lists/bridgingSpecies.KH2012.mm39.txt | sed 's/,$/\n/') || species_list=$species
+
+# define command
+cmd="""
+snakemake \
+	--snakefile $snakefile \
+	--config \
+	species_list=$species_list \
+	pickle=$pickle \
+	data_dir=$data_dir \
+	$force_flag \
+	$snakemake_args \
+	$nthreads
+"""
+
+if [[ $nthreads == '-nr' ]]; then echo $cmd; fi # print command during dry run
+eval $cmd # run snakefile
