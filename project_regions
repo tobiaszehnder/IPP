@@ -74,10 +74,15 @@ fi
 
 # if chain was not passed, search existing based on reference and target species
 chain_dir=$aln_dir/chain
+mkdir -p $chain_dir
 if [ -z ${chain+x} ]; then
 	chain=$(echo $chain_dir/${reference}.${target}*all.pre.chain) # if multiple chains are present, take the netted *.all.pre.chain
 	[[ ! -e $chain ]] && chain_arr=($(eval echo $chain_dir/${reference}.${target}*chain)) && chain=${chain_arr[0]} # if no *.all.pre.chain is found, take the first of any other chain files that match the pattern
-	[[ ! -e $chain ]] && echo -e "Chain file for the pairwise alignment of this species pair not found at ${chain_dir}.\nProvide one using the -c flag." && exit 1
+	if [[ ! -e $chain ]]; then
+		url_ucsc=http://hgdownload.soe.ucsc.edu/goldenPath/${reference}/vs${target^}/${reference}.${target}.all.chain.gz
+		if wget -q --method=HEAD $url_ucsc; then wget -O $chain_dir/$reference.$target.all.chain.gz $url_ucsc; fi
+	fi
+	[[ ! -e $chain ]] && echo -e "Chain file for the pairwise alignment of this species pair neither found at ${chain_dir} nor at UCSC.\nProvide one using the -c flag." && exit 1
 fi
 
 # check if bed-file contains at least 4 columns and unique names in column 4
