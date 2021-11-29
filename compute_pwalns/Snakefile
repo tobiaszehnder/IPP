@@ -25,13 +25,17 @@ for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_d
     if not os.path.exists(dr):
         os.makedirs(dr)
 
-# define targets
-species_list=species_list.split(',')
-print(species_list)
-targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
-if not pickle == False:
-    targets += ['%s/%s.pwaln.pkl' %(pkl_dir, pickle.replace(',','.'))] # pickle contains the ref-target species pair, e.g. danrer11,mm39
-
+# define targets (if not passed)
+try:
+    targets = target_list.split(',')
+    species_list = []
+except NameError:
+    species_list=species_list.split(',')
+    print(species_list)
+    targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
+    if not pickle == False:
+        targets += ['%s/%s.pwaln.pkl' %(pkl_dir, pickle.replace(',','.'))] # pickle contains the ref-target species pair, e.g. danrer11,mm39
+    
 ### RULES ###
 
 rule all:

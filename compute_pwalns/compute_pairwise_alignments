@@ -4,10 +4,11 @@ usage() {
 cat << EOF
 Pipeline for computing pairwise alignments for all species pairs in a list of given species
 
-Usage: prun mdl ${0##*/} -s SPECIES [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
+Usage: prun mdl ${0##*/} -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
 
-required:
+required (one of both):
 	-s SPECIES		Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
+	-t TARGETS		Comma-separated list or file with target files (e.g. a list of chain files) to be produced
 
 optional:
 	-p CREATE_PKL		Pass a comma-separated reference and target species for creating a pickle file with all pairwise alignments (pickled dictionary of data frames). Used as input for IPP. (E.g. danRer11,mm39)
@@ -27,9 +28,10 @@ force="none"
 nthreads="--cores 1"
 snakefile="/project/ipp/bin/compute_pwalns/Snakefile"
 snakemake_args="-pr --rerun-incomplete"
-while getopts ":s:p:d:f:@:!:n" OPTION; do
+while getopts ":s:t:p:d:f:@:!:n" OPTION; do
  	case $OPTION in
 		s) species=$OPTARG ;;
+		t) targets=$OPTARG ;;
 		p) pickle=$OPTARG ;;
 		d) data_dir=$(realpath $OPTARG) ;;
 		f) force=$OPTARG ;;
@@ -41,7 +43,7 @@ while getopts ":s:p:d:f:@:!:n" OPTION; do
 done
 
 # throw error if not all mandatory arguments are passed
-if [ -z ${species+x} ]; then usage && exit 1; fi
+if [ -z ${species+x} ] && [ -z ${targets+x} ]; then usage && exit 1; fi
 
 # define which rules to force run
 if [[ $force == "all" ]]; then
@@ -52,15 +54,21 @@ else
 	force_flag="--forcerun $force"
 fi
 
-# read species file if one was passed
-[[ -e $species ]] && species_list=$(awk -vORS=, '/^[^#]/ {print $1}' $species | sed 's/,$/\n/') || species_list=$species
+# read species / targets file if one was passed
+if [ -n "$species" ]; then
+	[[ -e $species ]] && species_list=$(awk -vORS=, '/^[^#]/ {print $1}' $species | sed 's/,$/\n/') || species_list=$species
+	species_or_targets_arg="species_list=${species_list}"
+elif [ -n "$targets" ]; then
+	[[ -e $targets ]] && target_list=$(awk -vORS=, '/^[^#]/ {print $1}' $targets | sed 's/,$/\n/') || target_list=$targets
+	species_or_targets_arg="target_list=${target_list}"
+fi
 
 # define command
 cmd="""
 snakemake \
 	--snakefile $snakefile \
 	--config \
-	species_list=$species_list \
+	$species_or_targets_arg \
 	pickle=$pickle \
 	data_dir=$data_dir \
 	$force_flag \
