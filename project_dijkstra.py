@@ -56,6 +56,8 @@ def main():
                print('Unable to map %s: %s' %(coord_id, coord))
           return
      df.index = [coord_id]
+     if not os.path.exists(tmp_dir):
+          os.mkdir(tmp_dir)
      df.to_csv('%s/%s.proj.tmp' %(tmp_dir,coord_id), sep='\t', header=False)
      
      return

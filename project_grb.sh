@@ -57,7 +57,9 @@ while IFS='' read -r LINE || [ -n "${LINE}" ]; do
 	echo "Effective runtime: ${difftime}"
 
 	# concatenate tmp output files to one file, delete tmp files
-	head -2 "${tmp_dir}/${grb_name}_0.proj.tmp" > $outfile;  eval tail -n 1 -q "${tmp_dir}/${grb_name}_{0..$((l-1))}.proj.tmp" >> $outfile
-	rm -r $tmp_dir
+	header=('coords_ref' 'coords_direct' 'coords_multi' 'score_direct' 'score_multi' 'ref_anchor_direct_left' 'ref_anchor_direct_right' 'ref_anchor_multi_left' 'ref_anchor_multi_right' 'qry_anchor_direct_left' 'qry_anchor_direct_right' 'qry_anchor_multi_left' 'qry_anchor_multi_right' 'bridging_species')
+	( IFS=$'\t'; echo "${header[*]}" ) > $outfile && sed -i '1s;^;\t;' $outfile # add header to the output file and prepend a leading \t to the header
+	eval tail -n 1 -q "${tmp_dir}/${grb_name}_{0..$((l-1))}.proj.tmp" >> $outfile
+	# rm -r $tmp_dir
 	echo "Done"
 done < $grb_bed

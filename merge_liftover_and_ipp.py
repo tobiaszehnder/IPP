@@ -48,7 +48,7 @@ df_target_bed = df.loc[:,['score']]
 df_target_bed.insert(0, 'name', df_target_bed.index)
 df_target_bed['strand'] = '.'
 df_target_bed.insert(0, 'chrom', [x.split(':')[0] if isinstance(x,str) else np.nan for x in df.coords_target])
-df_target_bed.insert(1, 'start', [int(x.split(':')[1])-1 if isinstance(x,str) else np.nan for x in df.coords_target])
-df_target_bed.insert(2, 'end', [int(x.split(':')[1]) if isinstance(x,str) else np.nan for x in df.coords_target])
+df_target_bed.insert(1, 'start', [int(x.split(':')[1]) if isinstance(x,str) else np.nan for x in df.coords_target])
+df_target_bed.insert(2, 'end', [int(x.split(':')[1])+1 if isinstance(x,str) else np.nan for x in df.coords_target])
 df_target_bed = df_target_bed.astype({'start': int, 'end': int})
 df_target_bed.to_csv(outfile, sep='\t', index=False, header=False)

@@ -1,7 +1,7 @@
-import os
+import os, sys
 
 # parse config dict entries to variables, e.g. a = d['a']. (data_dir, species_list)
-data_dir = os.path.abspath('../ipp_data')
+data_dir = os.path.abspath('../ipp-data')
 for k,v in config.items():
     exec(k + '=v')
        
@@ -16,7 +16,7 @@ chain_dir = alignment_dir + '/chain'
 maf_dir = alignment_dir + '/maf'
 net_dir = alignment_dir + '/net'
 psl_dir = alignment_dir + '/psl'
-tbl_dir = alignment_dir + '/tbl'
+tbl_dir = alignment_dir + '/chainTbl'
 bed_dir = alignment_dir + '/bed'
 pkl_dir = alignment_dir + '/pkl'
 
@@ -27,7 +27,8 @@ for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_d
 
 # define targets
 species_list=species_list.split(',')
-targets = [axtnet_dir + '/%s.%s.net.axt.gz' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
+print(species_list)
+targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
 if not pickle == False:
     targets += ['%s/%s.pwaln.pkl' %(pkl_dir, pickle.replace(',','.'))] # pickle contains the ref-target species pair, e.g. danrer11,mm39
 
@@ -46,15 +47,23 @@ rule pickle:
         missing_pwalns='missing_pwalns_forbidden'
     shell:
         'pickle_pwalns.py {output} {params} {input}'
-        
-rule axtnet_to_tbl:
+
+rule chain_to_tbl:
     input:
-        axtnet='%s/{s1}.{s2}.net.axt.gz' %axtnet_dir,
-        s2_sizes=ancient('%s/{s2}.sizes' %assembly_dir)
+        chain='%s/{s1}.{s2}.all.pre.chain' %chain_dir,
     output:
         '{tbl_dir}/{s1}.{s2}.tbl'
     shell:
-        'axtnet_to_tbl.R {input} {output} > {output}.log'
+        'chainToTbl.py {input} {output}'
+        
+# rule axtnet_to_tbl:
+#     input:
+#         axtnet='%s/{s1}.{s2}.net.axt.gz' %axtnet_dir,
+#         s2_sizes=ancient('%s/{s2}.sizes' %assembly_dir)
+#     output:
+#         '{tbl_dir}/{s1}.{s2}.tbl'
+#     shell:
+#         'axtnet_to_tbl.R {input} {output} > {output}.log'
         
 rule gzip:
     input:
@@ -128,17 +137,18 @@ rule maf_to_psl:
 rule lastal_maf:
     input:
         prj=ancient('%s/{s1}.prj' %lastdb_dir),
-        fa=ancient('%s/{s2}.fa' %fasta_dir)
+        fa=ancient('%s/{s2}.fa' %fasta_dir),
+        assembly_dir=ancient(assembly_dir)
     output:
         '{maf_dir}/{s1}.{s2}.maf'
     params:
         lastdb_prefix='%s/{s1}' %lastdb_dir
     threads:
-        min(workflow.cores, 30)
+        min(workflow.cores, 2)
     shell:
         '''
         /scratch/ngsvin/bin/Last/last-983/src/lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
-        remove_species_prefix {output}
+        remove_species_prefix {input.assembly_dir} {output}
         '''
 
 rule lastdb_prj:
@@ -149,7 +159,7 @@ rule lastdb_prj:
     params:
         prefix='{lastdb_dir}/{species}'
     threads:
-        min(workflow.cores, 30)
+        min(workflow.cores, 2)
     shell:
         '/scratch/ngsvin/bin/Last/last-983/src/lastdb -P {threads} -c {params.prefix} {input}'
         

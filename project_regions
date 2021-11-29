@@ -93,7 +93,7 @@ mkdir -p $outdir $outdir/intermediate_files
 
 # liftOver regions that are directly alignable
 echo "Lifting over alignable regions"
-[[ $dry_run ]] || cat $bedfile | awk -F"\t" -v OFS="\t" '{s=($3-$2)/2; $2+=s; $3-=s-1; printf "%s\t%.0f\t%.0f\t%s\n",$1,$2,$3,$4}' > ${bedfile}_centered # save region centers to prevent "partially deleted" in liftOver output
+[[ $dry_run ]] || cat $bedfile | awk -F"\t" -v OFS="\t" '{s=int(($3-$2)/2); $2+=s; printf "%s\t%.0f\t%.0f\t%s\n",$1,$2,$2+1,$4}' > ${bedfile}_centered # save region centers to prevent "partially deleted" in liftOver output
 liftover_projections=$outdir/intermediate_files/$(sed -e "s/\.bed/\.${target}_liftover\.bed/" <<< $(basename $bedfile))
 liftover_unmapped=$outdir/intermediate_files/$(sed -e "s/\.bed/\.${target}_liftover_unmapped\.bed/" <<< $(basename $bedfile))
 $cmd liftOver ${bedfile}_centered $chain $liftover_projections $liftover_unmapped
@@ -178,6 +178,6 @@ echo "Classify conservation of projected regions"
 projections_bedfile=$outdir/$(basename $bedfile .bed).${target}.bed
 outfile=$outdir/$(basename $bedfile .bed).${reference}.bed
 threshold=0.95
-$cmd classify_conservation.R $reference $outfile $bedfile $projections_bedfile $threshold $target_bedfile
+$cmd classify_conservation.R $reference $outfile $bedfile $projections_bedfile $chain $threshold $target_bedfile
 
 echo "Done"

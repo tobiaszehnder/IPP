@@ -131,89 +131,74 @@ def longest_increasingly_sorted_subsequence(seq):
 
     return result[::-1]    # reversing
 
-
-# function to determine anchors of a given genomic coordinate
-# pwaln: if x lies within an alignment, return the coordinate itself as both anchors
 def get_anchors(df, chrom, x, return_top_n=False): # return_top_n: do not just return the two closest anchors, but the list of topn anchors (used in get_anchors_between_boundaries())
-  ### NEW: overlapping alignments are no longer interpolated to the exact location on the alignment. instead, the ends of the alignments are taken as flanking anchors.
-  ### this is because the alignments may have different lengths in ref and qry due to gaps and we can not be sure that the nth bp on the ref aligns with the same nth bp on the qry.
-  
   # if x lies within an alignment, return its up- and downstream ends as anchors
   anchor_cols = ['ref_chrom','ref_start','ref_end','ref_coord','qry_chrom','qry_start','qry_end','qry_coord','qry_strand']
-  ov_aln = df.loc[(df.ref_chrom == chrom) & (df.ref_start < x) & (df.ref_end > x),].reset_index(drop=True) # x lies in an alignment. return x itself as both anchors
+  ov_aln = df.loc[(df.ref_chrom == chrom) & (df.ref_start < x) & (df.ref_end > x),].reset_index(drop=True) # x lies on an alignment block. return x itself as both anchors
   ov_aln['ref_coord'] = (ov_aln.ref_start + ov_aln.ref_end) / 2 # add the center of the alignment as the `ref_coord` column in order to check for collinearity with up- and downstream anchors later
   ov_aln['qry_coord'] = (ov_aln.qry_start + ov_aln.qry_end) / 2 # add the center of the alignment as the `qry_coord` column in order to check for collinearity with up- and downstream anchors later
   
-  # first define anchors upstream downstream and ov_aln, then do major_chrom / collinearity test, then either return overlapping anchor or closest anchors.
+  # first define anchors upstream, downstream and ov_aln, then do major_chrom / collinearity test, then either return overlapping anchor or closest anchors.
   # take orientation into account for the anchor definition. if start > end, then the aln is to the '-' strand.
-  # OLD AND WRONG COMMENT: in that scenario, if we are looking for the downstream anchor, we are interested in the smaller (WRONG) value, i.e. the end coordinate.
-  # actually, we are always interested in the same labeled coordinate. so in the DOWNSTREAM case we are looking for the START coordinate.
-  # but if the qry is inverted, the start coordinate will be greater than the end and so we'll save that info in the qry_strand variable later.
-  # remember that the REF coords are always on the '+' strand, so for slicing the df we don't need to check for the smaller/bigger value of start/end, it will always be start < end
-  # only select the first 100. the rest just takes longer to compute min / max and most likely will (and should) not be an anchor anyways. (and they are sorted by distance to x, so this is fine)
-  anchors_upstream = df.loc[abs(df.loc[(df.ref_chrom == chrom) & (df.ref_end < x),].ref_end - x).sort_values().index,['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']].iloc[:100,:].reset_index(drop=True) # keeping the index makes creating a new column later very slow
+  # for speed reasons only select the first 100. the rest just takes longer to compute min / max and most likely will (and should) not be an anchor anyways.
+  anchors_upstream = df.loc[abs(df.loc[(df.ref_chrom == chrom) & (df.ref_end < x),].ref_end - x).sort_values().index,['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']].iloc[:100,:].reset_index(drop=True) # keeping index slows column creation later
+  anchors_downstream = df.loc[abs(df.loc[(df.ref_chrom == chrom) & (df.ref_start > x),].ref_start - x).sort_values().index,['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']].iloc[:100,:].reset_index(drop=True)
   anchors_upstream.insert(3, 'ref_coord', anchors_upstream.ref_end)
-  anchors_downstream = df.loc[abs(df.loc[(df.ref_chrom == chrom) & (df.ref_start > x),].ref_start - x).sort_values().index,['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']].iloc[:100,:].reset_index(drop=True) # keeping the index makes creating a new column later very slow
   anchors_downstream.insert(3, 'ref_coord', anchors_downstream.ref_start)
-#   anchors_upstream.columns = anchors_downstream.columns = ['ref_chrom','ref_coord','qry_chrom','qry_start','qry_end']
-  # abort if less than 5 pwalns to each side (too sparse, not able to ensure collinearity)
-  if min(anchors_upstream.shape[0], anchors_downstream.shape[0]) < 5:
-    return pd.DataFrame(columns=anchor_cols)
-  # OLD AND WRONG COMMENT: set the corresponding start or end coordinate that is closer to the projected coordinate (choosing the max/min assures correct handling of inverted alignments)
-  # WRONG: anchors_upstream['qry_coord'] = anchors_upstream.loc[:,('qry_start','qry_end')].apply(max, axis=1)
-  # WRONG: anchors_downstream['qry_coord'] = anchors_downstream.loc[:,('qry_start','qry_end')].apply(min, axis=1)
-  # new: choosing the SAME LABELED COORDINATE as the reference, i.e. START in case of downsteam and END in case of upstream.
+  # set the corresponding start / end coordinate that is closer to the projected coordinate as the qry_coord. (choosing the SAME LABELED COORDINATE as the reference, i.e. START in case of downsteam and END in case of upstream)
   anchors_upstream['qry_coord'] = anchors_upstream.qry_end
   anchors_downstream['qry_coord'] = anchors_downstream.qry_start
-  
-  # top 10 produced many locally collinear pwalns that were still non-collinear outliers in the global view of the GRB (is that really true?).
-  # also, top 10 still often has local cluster of outliers and is depleted in the true major_chrom pwalns, leading to the 'wrong' major_chrom.
-  # since the updated collinearity test is very efficient, take top 20 to each direction.
+  if min(anchors_upstream.shape[0], anchors_downstream.shape[0]) < 1: # require minimum of 1 anchor on each side. later, the minimum total number of collinear anchors will be set to 5 (but one side is allowed to have as little as 1 anchor).
+    return pd.DataFrame(columns=anchor_cols)
+
+  # test collinearity of anchors: take top 20 in each direction (top 10 produced many locally collinear pwalns that were still non-collinear outliers in the global view of the GRB.)
+  # note: using ungapped chain blocks might require n to be even larger.
+  minn = 5
   topn = 20
   
-  # MAJOR CHROMOSOME: retain anchors that point to the majority chromosome in top twenty of both up- and downstream anchors
-  try:
-    major_chrom = pd.concat([anchors_upstream[:topn], ov_aln, anchors_downstream[:topn]], axis=0, sort=False).qry_chrom.value_counts().idxmax()
-  except ValueError:
-    print(anchors_upstream.head(2))
-    print(anchors_upstream.shape)
-    print(anchors_downstream.head(2))
-    print(anchors_downstream.shape)
+  # MAJOR CHROMOSOME: retain anchors that point to the majority chromosome in top n of both up- and downstream anchors
+  major_chrom = pd.concat([anchors_upstream[:topn], ov_aln, anchors_downstream[:topn]], axis=0, sort=False).qry_chrom.value_counts().idxmax()
   ov_aln[ov_aln.qry_chrom == major_chrom]
   anchors_upstream = anchors_upstream[anchors_upstream.qry_chrom == major_chrom]
   anchors_downstream = anchors_downstream[anchors_downstream.qry_chrom == major_chrom]
   
   # COLLINEARITY: remove pwalns pointing to outliers by getting the longest sorted subsequence of the top n of both up- and downstream anchors.
   closest_anchors = pd.concat([anchors_upstream[:topn][::-1], ov_aln, anchors_downstream[:topn]], axis=0, sort=False).reset_index(drop=True) # reset_index necessary, otherwise working with duplicate indices messing things up
-  idx_collinear = closest_anchors.index[np.intersect1d(closest_anchors.qry_coord.values, longest_sorted_subsequence(closest_anchors.qry_coord.values.astype(int)), return_indices=True)[1]] # this step takes 2 sec
+  idx_collinear = closest_anchors.index[np.intersect1d(closest_anchors.qry_coord.values.astype(int), longest_sorted_subsequence(closest_anchors.qry_coord.values.astype(int)), return_indices=True)[1]] # this step takes 2 sec
   closest_anchors = closest_anchors.loc[idx_collinear,].dropna(axis=1, how='all') # drop columns if it only contains NaNs (see explanation below)
+  # set minimum number of collinear anchors to 5 (for species pairs with very large evol. distances setting a lower boundary for the number of collinear anchors will help reduce false positives)
+  if closest_anchors.shape[0] < minn:
+    return pd.DataFrame(columns=anchor_cols)
   
   # return the top anchors if the flag was passed
   if return_top_n:
     return closest_anchors[['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']]
   
   # check if the original ov_aln is still present (or ever was) in the filtered closest_anchors (that include a potential ov_aln)
+  # if not, it was an outlier alignment and was filtered out
+  # if yes, narrow it to the actual position of x and its relative position in the qry such that the returned anchors have distance = 0 to x
   ov_aln = closest_anchors.loc[(closest_anchors.ref_start < x) & (closest_anchors.ref_end > x),].reset_index(drop=True)
   if ov_aln.shape[0] == 1:
-    x_relative_to_upstream = x - ov_aln.ref_start[0]
+    x_relative = x - ov_aln.ref_start[0]
     strand = '+' if ov_aln.qry_start[0] < ov_aln.qry_end[0] else '-'
+    
     vals_up = ov_aln.copy().rename(index={0:'upstream'})
-    vals_down = ov_aln.copy().rename(index={0:'downstream'})
-    vals_up.ref_coord = vals_up.ref_start # here it is the start coord for same-oriented because we are looking at an overlapping alignment
-    vals_down.ref_coord = vals_down.ref_end
-    # for the qry_coord: always take qry_start for upstream and qry_end for downstream. why? if strand=='-', qry_start > qry_end and thus we don't need to check.
-    vals_up.qry_coord = vals_up.qry_start
-    vals_down.qry_coord = vals_down.qry_end
+    vals_up.ref_start = x-1
+    vals_up.ref_end = x
+    vals_up.ref_coord = x
+    vals_up.qry_start = ov_aln.qry_start[0] + x_relative - 1 if strand == '+' else ov_aln.qry_start[0] - x_relative + 2
+    vals_up.qry_end = vals_up.qry_start + 1 if strand == '+' else vals_up.qry_start - 1
+    vals_up.ref_coord = vals_up.ref_end
+    vals_up.qry_coord = vals_up.qry_end
+
+    vals_down = vals_up.copy().rename(index={'upstream':'downstream'})
+    vals_down.loc[:,('ref_start', 'ref_end')] += 1
+    qry_shift = 1 if strand == '+' else -1
+    vals_down.loc[:,('qry_start', 'qry_end')] += qry_shift
+    vals_down.ref_coord = vals_down.ref_start
+    vals_down.qry_coord = vals_down.qry_start
+
     anchors = pd.concat([pd.concat([vals_up, vals_down], axis=0), pd.DataFrame({'qry_strand':strand}, index=['upstream','downstream'])], axis=1)
-      
-#     # old: interpolated the actual position on the alignment. however, this is inaccurate because alignments can contain gaps and so they are not necessarily the same length in ref and qry
-#     if strand == '+'
-#       vals_up = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]+x_relative_to_upstream, strand]
-#       vals_down = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]+x_relative_to_upstream, strand] # add an offset of 1 between up- and downstream anchor
-#     else:
-#       vals_up = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]-x_relative_to_upstream, strand]
-#       vals_down = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]-x_relative_to_upstream, strand] # add an offset of 1 between up- and downstream anchor
-#     anchors = pd.DataFrame.from_dict({'upstream': vals_up, 'downstream': vals_down}, orient='index', columns=anchor_cols)
   else:
     anchor_upstream = closest_anchors.loc[abs(closest_anchors.loc[closest_anchors.ref_coord < x,].ref_coord - x).sort_values().index,].head(1).rename(index=lambda x:'upstream')
     if anchor_upstream.shape[0] > 0:
@@ -226,7 +211,7 @@ def get_anchors(df, chrom, x, return_top_n=False): # return_top_n: do not just r
     anchors = pd.concat([anchor_upstream, anchor_downstream]).loc[:,anchor_cols]
   anchors.loc[:,['ref_coord','qry_coord']] = anchors.loc[:,['ref_coord','qry_coord']].astype(int) # convert numeric coordinates to int
   return anchors
-
+  
 def get_scaling_factor(genome_size_reference, half_life_distance):
   # function to determine scaling factor that produces a score of 0.5 for a given half_life_distance in the reference species.
   # this scaling factor will be used in all other species in the graph, but scaled to the according respective genome sizes.
@@ -664,3 +649,102 @@ def propagate_anchors(reference, target, coord, coord_id, pwaln, verbose=False, 
     path['id'] = coord_id
     path = path.reset_index().set_index(['id',*path.index.names]) 
   return ob, path
+
+
+### OLD ###
+  
+# function to determine anchors of a given genomic coordinate
+# pwaln: if x lies within an alignment, return the coordinate itself as both anchors
+def get_anchors_old(df, chrom, x, return_top_n=False): # return_top_n: do not just return the two closest anchors, but the list of topn anchors (used in get_anchors_between_boundaries())
+  ### NEW: overlapping alignments are no longer interpolated to the exact location on the alignment. instead, the ends of the alignments are taken as flanking anchors.
+  ### this is because the alignments may have different lengths in ref and qry due to gaps and we can not be sure that the nth bp on the ref aligns with the same nth bp on the qry.
+  
+  # if x lies within an alignment, return its up- and downstream ends as anchors
+  anchor_cols = ['ref_chrom','ref_start','ref_end','ref_coord','qry_chrom','qry_start','qry_end','qry_coord','qry_strand']
+  ov_aln = df.loc[(df.ref_chrom == chrom) & (df.ref_start < x) & (df.ref_end > x),].reset_index(drop=True) # x lies in an alignment. return x itself as both anchors
+  ov_aln['ref_coord'] = (ov_aln.ref_start + ov_aln.ref_end) / 2 # add the center of the alignment as the `ref_coord` column in order to check for collinearity with up- and downstream anchors later
+  ov_aln['qry_coord'] = (ov_aln.qry_start + ov_aln.qry_end) / 2 # add the center of the alignment as the `qry_coord` column in order to check for collinearity with up- and downstream anchors later
+  
+  # first define anchors upstream downstream and ov_aln, then do major_chrom / collinearity test, then either return overlapping anchor or closest anchors.
+  # take orientation into account for the anchor definition. if start > end, then the aln is to the '-' strand.
+  # OLD AND WRONG COMMENT: in that scenario, if we are looking for the downstream anchor, we are interested in the smaller (WRONG) value, i.e. the end coordinate.
+  # actually, we are always interested in the same labeled coordinate. so in the DOWNSTREAM case we are looking for the START coordinate.
+  # but if the qry is inverted, the start coordinate will be greater than the end and so we'll save that info in the qry_strand variable later.
+  # remember that the REF coords are always on the '+' strand, so for slicing the df we don't need to check for the smaller/bigger value of start/end, it will always be start < end
+  # only select the first 100. the rest just takes longer to compute min / max and most likely will (and should) not be an anchor anyways. (and they are sorted by distance to x, so this is fine)
+  anchors_upstream = df.loc[abs(df.loc[(df.ref_chrom == chrom) & (df.ref_end < x),].ref_end - x).sort_values().index,['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']].iloc[:100,:].reset_index(drop=True) # keeping the index makes creating a new column later very slow
+  anchors_upstream.insert(3, 'ref_coord', anchors_upstream.ref_end)
+  anchors_downstream = df.loc[abs(df.loc[(df.ref_chrom == chrom) & (df.ref_start > x),].ref_start - x).sort_values().index,['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']].iloc[:100,:].reset_index(drop=True) # keeping the index makes creating a new column later very slow
+  anchors_downstream.insert(3, 'ref_coord', anchors_downstream.ref_start)
+#   anchors_upstream.columns = anchors_downstream.columns = ['ref_chrom','ref_coord','qry_chrom','qry_start','qry_end']
+  # abort if less than 5 pwalns to each side (too sparse, not able to ensure collinearity)
+  if min(anchors_upstream.shape[0], anchors_downstream.shape[0]) < 5:
+    return pd.DataFrame(columns=anchor_cols)
+  # OLD AND WRONG COMMENT: set the corresponding start or end coordinate that is closer to the projected coordinate (choosing the max/min assures correct handling of inverted alignments)
+  # WRONG: anchors_upstream['qry_coord'] = anchors_upstream.loc[:,('qry_start','qry_end')].apply(max, axis=1)
+  # WRONG: anchors_downstream['qry_coord'] = anchors_downstream.loc[:,('qry_start','qry_end')].apply(min, axis=1)
+  # new: choosing the SAME LABELED COORDINATE as the reference, i.e. START in case of downsteam and END in case of upstream.
+  anchors_upstream['qry_coord'] = anchors_upstream.qry_end
+  anchors_downstream['qry_coord'] = anchors_downstream.qry_start
+  
+  # top 10 produced many locally collinear pwalns that were still non-collinear outliers in the global view of the GRB (is that really true?).
+  # also, top 10 still often has local cluster of outliers and is depleted in the true major_chrom pwalns, leading to the 'wrong' major_chrom.
+  # since the updated collinearity test is very efficient, take top 20 to each direction.
+  topn = 20
+  
+  # MAJOR CHROMOSOME: retain anchors that point to the majority chromosome in top twenty of both up- and downstream anchors
+  try:
+    major_chrom = pd.concat([anchors_upstream[:topn], ov_aln, anchors_downstream[:topn]], axis=0, sort=False).qry_chrom.value_counts().idxmax()
+  except ValueError:
+    print(anchors_upstream.head(2))
+    print(anchors_upstream.shape)
+    print(anchors_downstream.head(2))
+    print(anchors_downstream.shape)
+  ov_aln[ov_aln.qry_chrom == major_chrom]
+  anchors_upstream = anchors_upstream[anchors_upstream.qry_chrom == major_chrom]
+  anchors_downstream = anchors_downstream[anchors_downstream.qry_chrom == major_chrom]
+  
+  # COLLINEARITY: remove pwalns pointing to outliers by getting the longest sorted subsequence of the top n of both up- and downstream anchors.
+  closest_anchors = pd.concat([anchors_upstream[:topn][::-1], ov_aln, anchors_downstream[:topn]], axis=0, sort=False).reset_index(drop=True) # reset_index necessary, otherwise working with duplicate indices messing things up
+  idx_collinear = closest_anchors.index[np.intersect1d(closest_anchors.qry_coord.values, longest_sorted_subsequence(closest_anchors.qry_coord.values.astype(int)), return_indices=True)[1]] # this step takes 2 sec
+  closest_anchors = closest_anchors.loc[idx_collinear,].dropna(axis=1, how='all') # drop columns if it only contains NaNs (see explanation below)
+  
+  # return the top anchors if the flag was passed
+  if return_top_n:
+    return closest_anchors[['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']]
+  
+  # check if the original ov_aln is still present (or ever was) in the filtered closest_anchors (that include a potential ov_aln)
+  ov_aln = closest_anchors.loc[(closest_anchors.ref_start < x) & (closest_anchors.ref_end > x),].reset_index(drop=True)
+  print(ov_aln)
+  if ov_aln.shape[0] == 1:
+    x_relative_to_upstream = x - ov_aln.ref_start[0]
+    strand = '+' if ov_aln.qry_start[0] < ov_aln.qry_end[0] else '-'
+    vals_up = ov_aln.copy().rename(index={0:'upstream'})
+    vals_down = ov_aln.copy().rename(index={0:'downstream'})
+    vals_up.ref_coord = vals_up.ref_start # here it is the start coord for same-oriented because we are looking at an overlapping alignment
+    vals_down.ref_coord = vals_down.ref_end
+    # for the qry_coord: always take qry_start for upstream and qry_end for downstream. why? if strand=='-', qry_start > qry_end and thus we don't need to check.
+    vals_up.qry_coord = vals_up.qry_start
+    vals_down.qry_coord = vals_down.qry_end
+    anchors = pd.concat([pd.concat([vals_up, vals_down], axis=0), pd.DataFrame({'qry_strand':strand}, index=['upstream','downstream'])], axis=1)
+      
+#     # old: interpolated the actual position on the alignment. however, this is inaccurate because alignments can contain gaps and so they are not necessarily the same length in ref and qry
+#     if strand == '+'
+#       vals_up = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]+x_relative_to_upstream, strand]
+#       vals_down = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]+x_relative_to_upstream, strand] # add an offset of 1 between up- and downstream anchor
+#     else:
+#       vals_up = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]-x_relative_to_upstream, strand]
+#       vals_down = [chrom, x, ov_aln.qry_chrom[0], ov_aln.qry_start[0]-x_relative_to_upstream, strand] # add an offset of 1 between up- and downstream anchor
+#     anchors = pd.DataFrame.from_dict({'upstream': vals_up, 'downstream': vals_down}, orient='index', columns=anchor_cols)
+  else:
+    anchor_upstream = closest_anchors.loc[abs(closest_anchors.loc[closest_anchors.ref_coord < x,].ref_coord - x).sort_values().index,].head(1).rename(index=lambda x:'upstream')
+    if anchor_upstream.shape[0] > 0:
+      anchor_upstream['qry_strand'] = '+' if anchor_upstream.qry_start[0] < anchor_upstream.qry_end[0] else '-'
+    anchor_downstream = closest_anchors.loc[abs(closest_anchors.loc[closest_anchors.ref_coord > x,].ref_coord - x).sort_values().index,].head(1).rename(index=lambda x:'downstream')
+    if anchor_downstream.shape[0] > 0:
+      anchor_downstream['qry_strand'] = '+' if anchor_downstream.qry_start[0] < anchor_downstream.qry_end[0] else '-'
+    if not anchor_upstream.shape[0] + anchor_downstream.shape[0] == 2: # if not both up- and downstream anchors were found (e.g. at synteny break points where one side does not have any anchors to the majority chromosome)
+      return pd.DataFrame(columns=anchor_cols)
+    anchors = pd.concat([anchor_upstream, anchor_downstream]).loc[:,anchor_cols]
+  anchors.loc[:,['ref_coord','qry_coord']] = anchors.loc[:,['ref_coord','qry_coord']].astype(int) # convert numeric coordinates to int
+  return anchors

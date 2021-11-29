@@ -3,23 +3,25 @@
 # lastal sometimes prepends the genome build (e.g. galGal6) as a prefix to the chromosome name such that the names look like this: galGal6chr3.
 # this script takes any number of files as arguments and renames those patterns, i.e. removes any mention of the genome build except for species where the genome build is part of the sequence names according to the .sizes file
 
-[[ $# == 0 ]] && echo "Pass min. 1 file to rename"
-files=( "$@" )
+[[ $# < 2 ]] && echo "Usage: remove_species_prefix assembly_dir file(s)_to_rename"
+assembly_dir=$1
+files=( "${@:2}" )
 sem_id=remove_species_prefix_$HOSTNAME_$RANDOM
 i=0
 N=50
 for file in ${files[@]}; do
 	i=$((i+1))
 	echo $i: $file
-	arr=(${file//./ })
+	base_name=$(basename $file)
+	arr=(${base_name//./ })
 	s1=${arr[0]}
 	s2=${arr[1]}
 	species=( $s1 $s2 )
 
 	sed_string=""
 	for sp in ${species[@]}; do
-		if grep -q "$sp" /project/ipp-data/data/assembly/${sp}.sizes; then
-			sed_string+="s/${sp}${sp}/${sp}/g;"
+		if grep -q "$sp" $assembly_dir/${sp}.sizes; then
+			sed_string+="s/${sp}${sp}/${sp}/g;" # in this case, the true chromosome names contain the genome build. this will remove double occurrences (e.g. carPer2carPer2.1 --> carPer2.1)
 		else
 			sed_string+="s/${sp}//g;"
 		fi

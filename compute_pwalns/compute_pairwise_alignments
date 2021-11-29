@@ -34,7 +34,7 @@ while getopts ":s:p:d:f:@:!:n" OPTION; do
 		d) data_dir=$(realpath $OPTARG) ;;
 		f) force=$OPTARG ;;
 		@) nthreads="--cores $OPTARG" ;;
-		n) nthreads="-nr" ;;
+		n) nthreads="${nthreads} -nr" ;;
 		!) snakemake_args="$snakemake_args $OPTARG" ;;
 		?) usage; exit 1 ;;
  	esac
@@ -53,7 +53,7 @@ else
 fi
 
 # read species file if one was passed
-[[ -e $species ]] && species_list=$(awk -vORS=, '/^[^#]/ {print $1}' species_lists/bridgingSpecies.KH2012.mm39.txt | sed 's/,$/\n/') || species_list=$species
+[[ -e $species ]] && species_list=$(awk -vORS=, '/^[^#]/ {print $1}' $species | sed 's/,$/\n/') || species_list=$species
 
 # define command
 cmd="""
