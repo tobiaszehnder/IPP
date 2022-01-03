@@ -53,7 +53,7 @@ if (!is.na(target_bedfile)) {
     ov <- suppressWarnings(findOverlaps(gr_projections, target_bed, maxgap=maxgap))
     gr$class <- paste0(gr$class, '-')
     gr$class[queryHits(ov)] <- gsub('-', '+', gr$class[queryHits(ov)])
-    colors <- c(`DC+`='255,0,0', `IC+`='255,0,0', `DC-`='30,30,30', `IC-`='30,30,30', `NC`='141,153,174')
+    colors <- c(`DC+`='255,0,0', `IC+`='255,0,0', `DC-`='30,30,30', `IC-`='30,30,30', `NC+`='141,153,174', `NC-`='141,153,174')
 } else {
     colors <- c(DC='127,201,127', IC='253,180,98', NC='141,153,174')
 }
