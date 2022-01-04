@@ -1,10 +1,63 @@
-import numpy as np, pandas as pd, sys, os, glob, heapq, heapq_max, re, itertools, copy
+import numpy as np, pandas as pd, sys, os, glob, heapq, heapq_max, re, itertools, copy, pyranges as pr
+
+def format_row_table_to_bed(row, which=('ref','qry')):
+    # function to convert a row from the results table to bed format
+    # the results table contains reference and query coordinates, bridging species, etc.
+    # the bed format either contains the coordinates of the ref or the qry species,
+    # and the coordinates of the opposite species in the name field.
+    colors = {'DC':'127,201,127', 'IC':'253,180,98', 'NC':'141,153,174', 'DC+':'255,0,0', 'IC+':'255,0,0', 'DC-':'30,30,30', 'IC-':'30,30,30', 'NC+':'141,153,174', 'NC-':'141,153,174'}
+    if which == 'ref':
+      chrom, loc = row['coords_ref'].split(':')
+      name_coords = row['coords_multi']
+    else:
+      chrom, loc = row['coords_multi'].split(':')
+      name_coords = row['coords_ref']
+    name = '{}_{}_{}'.format(row.name, name_coords, row['conservation'])
+    bed_row = pd.Series([chrom, loc, int(loc)+1, name, row['score_multi'], '.', loc, int(loc)+1, colors[row['conservation']]])
+    return bed_row
+
+def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh=.95, maxgap=500):
+  # function for determining the conservation of sequence (DC/IC/NC) and function (+/-)
+  
+  # determine sequence conservation
+  sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] == 1 else 'IC' if x['score_multi'] >= thresh else 'NC', axis=1).values
+  
+  # create PyRanges object of projections
+  df_multi = pd.DataFrame({'Chromosome': [x.split(':')[0] for x in df_projections['coords_multi']],
+                           'Start': [int(x.split(':')[1]) for x in df_projections['coords_multi']]})
+  df_multi['End'] = df_multi['Start'] + 1
+  pr_multi = pr.PyRanges(df_multi)
+  
+  # determine functional conservation by checking for overlap with target regions
+  functional_conservation = [''] * df_multi.shape[0]
+  if target_regions is not None:
+    # expand target regions by maxgap
+    target_regions.Start -= maxgap
+    target_regions.End += maxgap
+    # save names of projected regions that overlap with a target region
+    names_FC = target_regions.overlap(pr_multi).Name.values
+    functional_conservation = ['+' if x in names_FC else '-' for x in df_projections.index]
+  
+  # combine information of sequence and functional conservation
+  conservation = [s+f for s,f in zip(sequence_conservation,functional_conservation)]
+  return conservation
+
+def reformat_coordinate(coord, chroms):
+  # function for converting numeric chromosome index to actual chromosome name.
+  # coord must be a string in the format "<chrom_idx>:<location>".
+  # chroms is the chromosome list from the pwaln pickle file
+  try:
+    formatted_coord = '{}:{}'.format(chroms[int(coord.split(':')[0])], coord.split(':')[1])
+  except ValueError:
+    raise
+  return formatted_coord
 
 class Coord:
-  def __init__(self, chrom, loc, id_):
-    self.chrom = chrom
-    self.loc = loc
-    self.id = id_
+  def __init__(self, chrom, chrom_idx, loc, id_):
+    self.chrom = str(chrom)
+    self.chrom_idx = int(chrom_idx)
+    self.loc = int(loc)
+    self.id = str(id_)
 
 def flatten_list(l):
   return [item for sublist in l for item in sublist]
@@ -74,7 +127,9 @@ def longest_increasingly_sorted_subsequence(seq):
 
     return result[::-1]    # reversing
 
-def get_anchors(df, chrom, x, return_top_n=False): 
+def get_anchors(df, chrom, x, return_top_n=False):
+  # function to find closest anchor points for a given coordinate
+  # anchors must pass collinearity test with surrounding anchors
   # return_top_n: do not just return the two closest anchors, but the list of topn anchors  
   anchor_cols = ['ref_chrom','ref_start','ref_end','ref_coord','qry_chrom','qry_start','qry_end','qry_coord','qry_strand']
   ov_aln = df.loc[(df.ref_chrom == chrom) & (df.ref_start < x) & (df.ref_end > x),].reset_index(drop=True) # x lies on an alignment block. return x itself as both anchors
@@ -176,7 +231,7 @@ def project_genomic_location(ref, qry, ref_coords, score, pwaln, genome_size, sc
   ref_loc = int(ref_coords.split(':')[1])
   anchors = get_anchors(pwaln[ref][qry], ref_chrom, ref_loc)
   if anchors.shape[0] < 2: # if only one anchor is found because of border region, return 0 score and empty coordinate string
-    return 0., '', ',', ','
+    return 0., '' #, ',', ','
   ref_anchors = ','.join(anchors.apply(lambda x: '{}:{}'.format(x['ref_chrom'], x['ref_coord']), axis=1))
   qry_anchors = ','.join(anchors.apply(lambda x: '{}:{}'.format(x['qry_chrom'],x['qry_coord']), axis=1))
   x_relative_to_upstream = (ref_loc - anchors.ref_coord['upstream']) / max(np.diff(anchors.ref_coord)[0], 1) # the max statement prevents potential zero division when anchors are the same (i.e. when the coord is on an alignment)
@@ -185,26 +240,30 @@ def project_genomic_location(ref, qry, ref_coords, score, pwaln, genome_size, sc
   # ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry species it should be roughly the same as it is a projection of the reference.
   score *= projection_score(ref_loc, anchors.ref_coord, genome_size[ref], scaling_factor)
   qry_coords = '{}:{}'.format(qry_chrom, qry_loc)
-  return score, qry_coords, ref_anchors, qry_anchors
+  return score, qry_coords #, ref_anchors, qry_anchors
 
 def get_shortest_path_to_qry(target_species, shortest_path):
   # Backtrace the shortest path from the reference to the given target species.
+  cols = ['from','score','coords']
+  if target_species not in shortest_path.keys():
+    return pd.DataFrame(columns=cols)
   current_species = target_species
-  l = []
+  reverse_species_path = []
   while current_species: # x='' at ref species, condition gets False, loop stops
-    l.append(current_species)
+    reverse_species_path.append(current_species)
     current_species = shortest_path[current_species][1]
-    
-  res = pd.DataFrame({k : shortest_path[k] for k in l[::-1]}, index=['score','from','coords','ref_anchors', 'qry_anchors']).T.loc[:,['from','score','coords','ref_anchors', 'qry_anchors']]
-  # res.ref_anchors = res.ref_anchors.apply(lambda x: ','.join(x)) # reformat tuple of anchor-pair to a comma-separated string
-  # res.qry_anchors = res.qry_anchors.apply(lambda x: ','.join(x)) # reformat tuple of anchor-pair to a comma-separated string  
+  species_path = reverse_species_path[::-1] 
+  res = pd.DataFrame({k : shortest_path[k] for k in species_path})
+  res.index = ['score','from','coords'] #,'ref_anchors', 'qry_anchors']
+  res = res.T.loc[:,cols] #,'ref_anchors', 'qry_anchors']]
   return res
 
 def get_shortest_path(ref, qry, ref_coords, species, pwaln, genome_size, scaling_factor, verbose=False):
   shortest_path = {}
   orange = []
   heapq_max.heappush_max(orange, (1, ref, ref_coords))
-  shortest_path[ref] = (1.0, '', ref_coords, ',', ',')
+  shortest_path[ref] = (1.0, '', ref_coords)
+#   shortest_path[ref] = (1.0, '', ref_coords, ',', ',') # with anchors
 
   while len(orange) > 0:
     (current_score, current_species, current_coords) = heapq_max.heappop_max(orange)
@@ -218,10 +277,12 @@ def get_shortest_path(ref, qry, ref_coords, species, pwaln, genome_size, scaling
       nxt_best_score = shortest_path.get(nxt_species,(0,))[0] # current score entry for nxt_species in shortest_path
       if current_score <= nxt_best_score:
         continue # if the score to current_species was lower than any previous path to nxt_species, nxt_species won't be reached faster through current_species. ignore and move on to the next species
-      nxt_score, nxt_coords, current_anchors, nxt_anchors = project_genomic_location(current_species, nxt_species, current_coords, current_score, pwaln, genome_size, scaling_factor)
+#       nxt_score, nxt_coords, current_anchors, nxt_anchors = 
+      nxt_score, nxt_coords = project_genomic_location(current_species, nxt_species, current_coords, current_score, pwaln, genome_size, scaling_factor)
       if nxt_score <= nxt_best_score:
         continue # only save the current path to nxt_species if it was indeed faster than any previous path to it
-      shortest_path[nxt_species] = (nxt_score, current_species, nxt_coords, current_anchors, nxt_anchors)
+      shortest_path[nxt_species] = (nxt_score, current_species, nxt_coords) #, current_anchors, nxt_anchors)
       heapq_max.heappush_max(orange, (nxt_score, nxt_species, nxt_coords))
   shortest_path_to_qry = get_shortest_path_to_qry(qry, shortest_path)
-  return shortest_path_to_qry, shortest_path, orange
+  return shortest_path_to_qry
+#   return shortest_path_to_qry, shortest_path, orange
