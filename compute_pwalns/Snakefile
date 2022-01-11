@@ -9,6 +9,7 @@ for k,v in config.items():
 assembly_dir = data_dir + '/assembly'
 alignment_dir = data_dir + '/alignment'
 fasta_dir = data_dir + '/fasta'
+repeatmasker_dir = fasta_dir + '/repeatMasker'
 lastdb_dir = alignment_dir + '/lastdb'
 axtnet_dir = alignment_dir + '/axtNet'
 axt_dir = alignment_dir + '/axt'
@@ -138,7 +139,7 @@ rule maf_to_psl:
         'maf-convert psl {input} > {output}'
 
 # lastal sometimes prepends the genome build as a prefix to the chromosome names (no idea why). replaces those occurrences.
-rule lastal_maf:
+rule lastal:
     input:
         prj=ancient('%s/{s1}.prj' %lastdb_dir),
         fa=ancient('%s/{s2}.fa' %fasta_dir),
@@ -148,14 +149,14 @@ rule lastal_maf:
     params:
         lastdb_prefix='%s/{s1}' %lastdb_dir
     threads:
-        min(workflow.cores, 2)
+        min(workflow.cores, 15)
     shell:
         '''
-        /scratch/ngsvin/bin/Last/last-983/src/lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
+        /scratch/ngsvin/bin/Last/last-983/src/lastal -m10 -E0.05 -C2 -P {threads} {params.lastdb_prefix} {input.fa} > {output}
         remove_species_prefix {input.assembly_dir} {output}
         '''
 
-rule lastdb_prj:
+rule lastdb:
     input:
         ancient('%s/{species}.fa' %fasta_dir)
     output:
@@ -163,7 +164,7 @@ rule lastdb_prj:
     params:
         prefix='{lastdb_dir}/{species}'
     threads:
-        min(workflow.cores, 2)
+        min(workflow.cores, 80)
     shell:
         '/scratch/ngsvin/bin/Last/last-983/src/lastdb -P {threads} -c {params.prefix} {input}'
         
@@ -174,7 +175,7 @@ rule twobit_to_sizes:
         '{basename}.sizes'
     shell:
         'twoBitInfo {input} stdout | sort -k2rn > {output}'
-
+        
 rule fa_to_twobit:
     input:
         ancient('%s/{species}.fa' %fasta_dir)
@@ -182,7 +183,41 @@ rule fa_to_twobit:
         '{assembly_dir}/{species}.2bit'
     shell:
         'faToTwoBit {input} {output}'
-    
+
+# rule repeatmasker:
+#     input: 
+#         fasta=ancient('{fasta_dir}/{species}_unmasked.fa'),
+#         repeatmasker_dir=repeatmasker_dir
+#     output:
+#         '{fasta_dir}/{species}.fa'
+#     # params:
+#         # family=lambda wc: ncbi_family_names[wc.species] ### this is not defined yet which is why I put this rule on ice for now. maybe I can retrieve this from NCBI? the dict should have keys = genome builds and values = family names
+#     threads:
+#         min(workflow.cores, 50)
+#     shell:
+#         '/package/sequencer/repeatmasker/4.0.7/RepeatMasker/RepeatMasker -pa {threads} -dir {input.repeatmasker_dir} {input.fasta}'
+#         # '/package/sequencer/repeatmasker/4.0.7/RepeatMasker/RepeatMasker -qq -e crossmatch -pa {threads} -dir {input.repeat_masker_dir} -species {params.family} {input.fasta}'
+
+# rule repeatmodeler_build_database:
+#     input:
+#         ancient('%s/{species}.fa' %fasta_dir)
+#     output:
+#         '{repeatmasker_dir}/{build}-families.fa'
+#     log:
+#         '{repeatmasker_dir}/{build}.out'
+#     threads:
+#         min(workflow.cores, 50)
+#     shell:
+#         '/package/sequencer/repeatmasker/4.1.0/RepeatModeler/RepeatModeler -database {wildcards.build} -pa {threads} -LTRStruct >& {log}'
+
+# rule repeatmodeler_build_database:
+#     input:
+#         ancient('%s/{species}.fa' %fasta_dir)
+#     output:
+#         '{repeatmasker_dir}/{build}.nsq'
+#     shell:
+#         '/package/sequencer/repeatmasker/4.1.0/RepeatModeler/BuildDatabase -name {wildcards.build} {input}'
+        
 rule get_fasta:
     output:
         '{fasta_dir}/{species}.fa'

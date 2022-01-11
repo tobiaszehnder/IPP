@@ -76,5 +76,5 @@ snakemake \
 	$nthreads
 """
 
-if [[ $nthreads == '-nr' ]]; then echo $cmd; fi # print command during dry run
+if [[ $nthreads == *'-nr' ]]; then echo $cmd; fi # print command during dry run
 eval $cmd # run snakefile
