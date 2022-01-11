@@ -165,7 +165,6 @@ def main():
   pbar = tqdm.tqdm(total=len(idx_ipp))
   for i in idx_ipp:
     coord = coords[i]
-#     coord = '{}:{}'.format(coords[i].chrom_idx, coords[i].loc)
     job_args = (coord,
                 args.ref,
                 args.qry,
@@ -183,11 +182,10 @@ def main():
   # reformat chromosome names: '0:123456' to 'chr1:123456'
   coord_cols = ['coords_ref', 'coords_direct', 'coords_multi']
   results.loc[:,coord_cols] = results.loc[:,coord_cols].apply(lambda x: [reformat_coordinate(y, chroms) if ':' in y else y for y in x])
-  ids_ipped_regions = np.setdiff1d([x.id for x in coords[idx_ipp]], unmapped)
-  results.index = ids_ipped_regions
   
   # add liftover projections to ipp projections table
-  ids_all_mapped_regions = np.setdiff1d([x.id for x in coords], unmapped)
+  ids_all_regions = [x.id for x in coords]
+  ids_all_mapped_regions = np.array(ids_all_regions)[~np.in1d(ids_all_regions, unmapped)] # this keeps the order. np.setdiff1d reorders.
   results = pd.concat([results, results_liftover]).loc[ids_all_mapped_regions,:]
   
   # write projections table to file
