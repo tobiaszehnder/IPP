@@ -677,18 +677,18 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
 
 namespace {
 
-template<typename Compare, typename Filter>
 std::vector<Ipp::PwalnEntry>
 longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
-                   Compare const& greaterThan,
-                   Filter const& filter) {
+                   std::function<bool(Ipp::PwalnEntry const&)> const& filter,
+                   std::function<int(Ipp::PwalnEntry const&)> const& qryStart,
+                   std::function<int(Ipp::PwalnEntry const&)> const& qryEnd) {
     // Finds the longest strictly increasing subsequence (in regards to the
     // given greater-than function). Only elements for which filter(seq[i])
     // returns true are considered.
     // O(n log k) algorithm.
 
     // m[i] contains the index to the smallest value in seq[] that is the end of
-    // a subsequence of length i.
+    // a subsequence of length i+1.
     std::vector<unsigned> m;
     m.reserve(seq.size());
 
@@ -715,7 +715,7 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
             continue;
         }
 
-        if (greaterThan(seq[i], seq[m.back()])) {
+        if (qryEnd(seq[m.back()]) <= qryStart(seq[i])) {
             prev[i] = m.back();
             m.push_back(i);
             continue;
@@ -730,7 +730,7 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
         unsigned v(m.size()-1);
         while(u < v) {
             unsigned const mid((u + v) / 2);
-            if (greaterThan(seq[i], seq[m[mid]])) {
+            if (qryEnd(seq[m[mid]]) <= qryStart(seq[i])) {
                 u = mid+1;
             } else {
                 v = mid;
@@ -739,7 +739,7 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
 
         // Update m if the new value is smaller than the previously referenced
         // one.
-        if (greaterThan(seq[m[u]], seq[i])) {
+        if (qryEnd(seq[i]) < qryEnd(seq[m[u]])) {
             if (u > 0) {
                 prev[i] = m[u-1];
             }
@@ -761,23 +761,70 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
 
 std::vector<Ipp::PwalnEntry>
 Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
+    bool const debug(false);
+
+    auto const printSeq = [](std::vector<PwalnEntry> const& seq) {
+        for (auto const& e : seq) {
+            std::cerr << e.qryStart << ' ' << e.qryEnd << ' '
+                      << (e.isQryReversed() ? "(-)" : "(+)") << std::endl;
+        }
+    };
+    if (debug) {
+        std::cerr << "seq: " << std::endl;
+        printSeq(seq);
+        std::cerr << std::endl;
+    }
+
     std::vector<PwalnEntry> const inc(::longestSubsequence(
             seq,
-            [](PwalnEntry const& lhs, PwalnEntry const& rhs) {
-                return lhs.qryStart > rhs.qryStart;
-            },
             [](PwalnEntry const& e) {
                 return !e.isQryReversed();
+            },
+            [](PwalnEntry const& e) {
+                return e.qryStart;
+            },
+            [](PwalnEntry const& e) {
+                return e.qryEnd;
             }));
 
     std::vector<PwalnEntry> const dec(::longestSubsequence(
             seq,
-            [](PwalnEntry const& lhs, PwalnEntry const& rhs) {
-                return lhs.qryEnd < rhs.qryEnd;
-            },
             [](PwalnEntry const& e) {
                 return e.isQryReversed();
+            },
+            [](PwalnEntry const& e) {
+                return -1 * (int)e.qryStart;
+            },
+            [](PwalnEntry const& e) {
+                return -1 * (int)e.qryEnd;
             }));
+
+    if (debug) {
+        std::cerr << "inc: " << std::endl;
+        printSeq(inc);
+        std::cerr << std::endl;
+
+        std::cerr << "dec: " << std::endl;
+        printSeq(dec);
+        std::cerr << std::endl
+                  << "---------------------------" << std::endl
+                  << std::endl;
+    }
+
+    // Sanity check: The entries in the inc/dec list should be strictly
+    // increasing/decreasing.
+    uint32_t loc(0);
+    for (auto const& e : inc) {
+        assert(loc <= e.qryStart);
+        assert(e.qryStart < e.qryEnd);
+        loc = e.qryEnd;
+    }
+    loc = std::numeric_limits<uint32_t>::max();
+    for (auto const& e : dec) {
+        assert(loc >= e.qryEnd);
+        assert(e.qryStart > e.qryEnd);
+        loc = e.qryStart;
+    }
 
     return inc.size() >= dec.size() ? inc : dec;
 }
