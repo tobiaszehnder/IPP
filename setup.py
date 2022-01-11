@@ -5,7 +5,7 @@ import numpy as np
 ipp_extension = Extension('ipp',
                           ['ippmodule.cpp', 'ipp.cpp'],
                           include_dirs=[np.get_include()],
-                          extra_compile_args=['-O0'])
+                          extra_compile_args=['-std=c++17'])
 setup(name='ipp',
       version='1.0',
       description='This is the IPP package',

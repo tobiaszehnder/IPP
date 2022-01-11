@@ -18,7 +18,14 @@ public:
         uint16_t refChrom;
         uint16_t qryChrom;
 
-        PwalnEntry() {}
+        PwalnEntry()
+            : refStart(0)
+            , refEnd(0)
+            , qryStart(0)
+            , qryEnd(0)
+            , refChrom(0)
+            , qryChrom(0)
+        {}
         PwalnEntry(PwalnEntry const& other)
             : refStart(other.refStart)
             , refEnd(other.refEnd)
@@ -68,7 +75,10 @@ public:
         uint16_t chrom;
         uint32_t loc;
 
-        Coords() {}
+        Coords()
+            : chrom(0)
+            , loc(0)
+        {}
         Coords(uint16_t chrom, uint32_t loc) : chrom(chrom), loc(loc) {}
 
         bool operator<(Coords const& other) const {
@@ -81,7 +91,7 @@ public:
         PwalnEntry downstream;
 
         Anchors() {}
-        Anchors(PwalnEntry upstream, PwalnEntry downstream)
+        Anchors(PwalnEntry const& upstream, PwalnEntry const& downstream)
             : upstream(upstream)
             , downstream(downstream)
         {}
@@ -93,7 +103,9 @@ public:
         Coords coords;
         Anchors anchors;
 
-        ShortestPathEntry() {}
+        ShortestPathEntry()
+            : score(0)
+        {}
         ShortestPathEntry(double score, 
                           std::string const& prevSpecies,
                           Coords const& coords,
