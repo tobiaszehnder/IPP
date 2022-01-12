@@ -6,6 +6,19 @@ import os
 import pandas as pd
 import tqdm
 
+LOG_LEVEL_QUIET = 0
+LOG_LEVEL_LOG = 1
+LOG_LEVEL_DEBUG = 2
+
+log_level = LOG_LEVEL_LOG
+
+def log(*args, **kwargs):
+    if log_level >= LOG_LEVEL_LOG:
+        print(*args, **kwargs)
+def debug(*args, **kwargs):
+    if log_level >= LOG_LEVEL_DEBUG:
+        print(*args, **kwargs)
+
 def main():
     parser = argparse.ArgumentParser(description='Independent Point Projections (IPP).\nA method for projecting genomic point coordinates between genomes with large evolutionary distances.')
     parser.add_argument('regions_file', help='Bed file containing genomic coordinates. regions with width > 1 will be centered.')
@@ -15,9 +28,16 @@ def main():
     parser.add_argument('--out_dir', default=os.getcwd(), help='directory for output files')
     parser.add_argument('--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
     parser.add_argument('--n_cores', type=int, default=1, help='number of CPUs')
-    parser.add_argument('--quiet', help='do not produce any verbose output')
+    parser.add_argument('--quiet', action="store_true", help='do not produce any log output')
+    parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
     parser.add_argument('--data_dir', default='/project/ipp-data')
     args = parser.parse_args()
+
+    global log_level
+    if args.quiet:
+        log_level = LOG_LEVEL_QUIET
+    elif args.verbose:
+        log_level = LOG_LEVEL_DEBUG
 
     # define paths
     assembly_dir = args.data_dir + '/assembly/'
@@ -26,13 +46,14 @@ def main():
         os.mkdir(args.out_dir)
 
     #input("about to init ipp")
+    log("Loading pwaln file")
     myIpp = ipp.Ipp()
     myIpp.load_pwalns(args.path_pwaln)
     myIpp.load_genome_sizes(assembly_dir);
     myIpp.set_half_life_distance(args.half_life_distance)
 
     #input('Press enter to start')
-    print('Projecting regions from %s to %s' %(args.ref, args.qry))
+    log('Projecting regions from %s to %s' %(args.ref, args.qry))
 
     # Read the regions file and enqueue one projection job per line.
     ref_coords = []
@@ -44,7 +65,10 @@ def main():
             refLoc = int(np.mean([int(cols[1]), int(cols[2])]))
             ref_coords.append((refChrom, refLoc))
 
-    pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
+    pbar = None
+    if log_level < LOG_LEVEL_DEBUG:
+        pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
+
     results = pd.DataFrame(
         columns=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi',
@@ -57,15 +81,33 @@ def main():
                              direct_ref_anchors,
                              direct_qry_anchors,
                              multi_shortest_path):
-        assert multi_shortest_path[-1][0] == args.qry
-        multi_score = multi_shortest_path[-1][1]
-        multi_coords = multi_shortest_path[-1][2]
+        # ref_coord:           string           "ref_chrom:ref_loc"
+        # direct_score:        float            [0-1]
+        # direct_coords:       string           "qry_chrom:qry_loc"
+        # direct_ref_anchors:  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
+        # direct_qry_anchors:  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
+        # multi_shortest_path: [ref, intermediate1, intermediate2, ..., qry]
+        #   Each entry:
+        #     species      string           "spX"
+        #     score        float            [0-1]
+        #     coords       string           "chrom:loc"
+        #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
+        #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
+        debug()
+        debug(ref_coord)
+        for e in multi_shortest_path:
+            debug(e)
   
+        multi_last_entry = multi_shortest_path[-1] 
+        assert multi_last_entry[0] == args.qry
+        multi_score = multi_last_entry[1]
+        multi_coords = multi_last_entry[2]
+
         # Ref anchors of the first species in the path (first non-reference species)
         multi_ref_anchors = multi_shortest_path[1][3]
   
         # Qry anchors of the last species in the path.
-        multi_qry_anchors = multi_shortest_path[-1][4]
+        multi_qry_anchors = multi_last_entry[4]
   
         multi_bridging_species = \
             ','.join([spe[0] for spe in multi_shortest_path[1:-1]])
@@ -80,7 +122,8 @@ def main():
                 pd.DataFrame([values], columns=results.columns),
                 ignore_index=True)
   
-        pbar.update()
+        if pbar:
+            pbar.update()
   
     # Start the projection
     myIpp.project_coords(args.ref,
@@ -88,9 +131,11 @@ def main():
                          ref_coords,
                          args.n_cores,
                          on_job_done_callback)
-    pbar.close()
+    if pbar:
+        pbar.close()
   
-    print(results)
+    debug()
+    debug(results)
   
     ### TO DO:
     ### name columns here and not in project_coord function
