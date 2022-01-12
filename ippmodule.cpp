@@ -44,6 +44,14 @@ ippNew(PyTypeObject* type, PyObject* args, PyObject* kwds) {
     return (PyObject *) self;
 }
 
+static void
+ippDealloc(PyIpp* self) {
+    // Destruct the ipp instance.
+    self->ipp.~Ipp();
+
+    Py_TYPE(self)->tp_free((PyObject*)self);
+}
+
 static PyObject*
 ippLoadPwalns(PyIpp* self, PyObject* args) {
     // Reads the pwalns from the given file.
@@ -236,6 +244,7 @@ static PyTypeObject PyIpp_Type = {
     .tp_name = "ipp.Ipp",
     .tp_basicsize = sizeof(PyIpp),
     .tp_itemsize = 0,
+    .tp_dealloc = (destructor)ippDealloc,
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_methods = ippMethods,
     .tp_new = ippNew,
