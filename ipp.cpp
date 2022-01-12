@@ -448,6 +448,7 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                             ? anchors->upstream.qryEnd
                             : anchors->downstream.qryStart);
     assert(qryUpStart < qryUpEnd);
+    double score;
     if (anchors->upstream == anchors->downstream) {
         // refLoc lies on an aligment.
         //  [  up.ref  ]
@@ -457,6 +458,8 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         refRightBound = anchors->upstream.refEnd;
         qryLeftBound = qryUpStart;
         qryRightBound = qryUpEnd;
+
+        score = 1.0d;
     } else {
         // [ up.ref ]  x    [ down.ref ]
         uint32_t const qryDownStart(!isQryReversed
@@ -471,6 +474,12 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         refRightBound = anchors->downstream.refStart; 
         qryLeftBound = qryUpEnd;
         qryRightBound = qryDownStart;
+
+        score = projectionScore(refLoc,
+                                refLeftBound,
+                                refRightBound,
+                                genomeSizes_.at(refSpecies),
+                                scalingFactor);
     }
     assert(refLeftBound <= refLoc && refLoc < refRightBound);
     double const relativeRefLoc(
@@ -480,12 +489,6 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
     // ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry
     // species it should be roughly the same as it is a projection of the
     // reference.
-
-    double const score(projectionScore(refLoc,
-                                       refLeftBound,
-                                       refRightBound,
-                                       genomeSizes_.at(refSpecies),
-                                       scalingFactor));
 
     return {{score, {anchors->upstream.qryChrom, qryLoc}, *anchors}};
 }
