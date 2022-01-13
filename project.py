@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import argparse
 import ipp
 import numpy as np
@@ -6,6 +7,8 @@ import os
 import pandas as pd
 import tabulate
 import tqdm
+import pyranges as pr
+from functions import *
 
 LOG_LEVEL_QUIET = 0
 LOG_LEVEL_LOG = 1
@@ -103,11 +106,12 @@ def main():
     elif args.verbose:
         log_level = LOG_LEVEL_DEBUG
 
-    # define paths
-    assembly_dir = args.data_dir + '/assembly/'
 
+    # define variables and create output directory
+    assembly_dir = args.data_dir + '/assembly/'
     if not os.path.exists(args.out_dir):
         os.mkdir(args.out_dir)
+    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
 
     #input("about to init ipp")
     log("Loading pwaln file")
@@ -139,6 +143,8 @@ def main():
                  'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
                  'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right',
                  'bridging_species'])
+    unmapped = []
+    
     def on_job_done_callback(ref_coord,
                              direct_score,
                              direct_coords,
@@ -157,12 +163,18 @@ def main():
         #     coords       string           "chrom:loc"
         #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
         #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
-        nonlocal results
+        nonlocal results, unmapped
         debug()
         debug("({})".format(len(results)))
         debug_shortest_path(multi_shortest_path, args.simple_coords)
   
-        multi_last_entry = multi_shortest_path[-1] 
+        multi_last_entry = multi_shortest_path[-1]
+
+        # handle unmapped region (multi_last_entry is not args.qry)
+        if not multi_last_entry[0] == args.qry:
+            unmapped += result.index.tolist()
+            return
+
         assert multi_last_entry[0] == args.qry
         multi_score = multi_last_entry[1]
         multi_coords = multi_last_entry[2]
@@ -199,13 +211,36 @@ def main():
   
     debug()
     debug(results.to_string())
-  
-    ### TO DO:
-    ### use ids from bed column 4 as index names (this should be part of the Coord class anyways, implement with that)
+
+    # write results table to file
+    columns_out=['coords_ref', 'coords_direct', 'coords_multi',
+                 'score_direct', 'score_multi', 'bridging_species']
+    results = results.loc[:,columns_out]
+    outfile_table = regions_file_basename + '.proj'
+    results.to_csv(os.path.join(args.out_dir, outfile_table), sep='\t', header=True, float_format='%.3f')
+
+    # write list of IDs of unmapped regions to file
+    outfile_unmapped = regions_file_basename + '.unmapped'
+    with open(outfile_unmapped, 'w') as f:
+        f.write('\n'.join(unmapped) + '\n')
+
+    # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
+    thresh = .95
+    maxgap = 500
+    target_regions = None
+    if hasattr(args, 'target_bedfile'):
+        target_regions = pr.read_bed(args.target_bedfile)
+    results['conservation'] = classify_conservation(results, target_regions, thresh, maxgap)
+      
+    # write results to bed files (bed9 format for both reference and target species)
+    # name column (4):    string    "id_qryChrom:qryLoc_class"    e.g. "peak_75_chr3:3880_IC+"
+    outfile_bed_ref = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.ref)
+    outfile_bed_qry = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.qry)
+    bed_ref = results.apply(lambda row: format_row_table_to_bed(row, 'ref'), axis=1)
+    bed_qry = results.apply(lambda row: format_row_table_to_bed(row, 'qry'), axis=1)
+    bed_ref.to_csv(outfile_bed_ref, sep='\t', index=False, header=None, float_format='%.3f')
+    bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
     
-    outfile = os.path.splitext(os.path.basename(args.regions_file))[0] + '.proj'
-    results.to_csv(os.path.join(args.out_dir, outfile), sep='\t', header=True)
-  
 if __name__ == '__main__':
     main()
 
