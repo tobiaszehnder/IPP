@@ -106,14 +106,14 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
     char const* refSpecies;
     char const* qrySpecies;
     PyObject* pyRefCoords; // [ (chrom1, loc1), (chrom2, loc2), ... ]
-    unsigned nCores;
+    unsigned nThreads;
     PyObject* callback;
     int res(PyArg_ParseTuple(args,
                              "ssO!IO",
                              &refSpecies,
                              &qrySpecies,
                              &PyList_Type, &pyRefCoords,
-                             &nCores,
+                             &nThreads,
                              &callback));
     if (!res) {
         return nullptr;
@@ -221,7 +221,7 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
         self->ipp.projectCoords(refSpecies,
                                 qrySpecies,
                                 refCoords,
-                                nCores,
+                                nThreads,
                                 onJobDone);
     } catch (std::exception const&) {
         return nullptr;

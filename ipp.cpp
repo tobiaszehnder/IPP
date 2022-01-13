@@ -169,12 +169,32 @@ Ipp::chromName(uint16_t chromId) const {
 }
 
 double
-Ipp::getScalingFactor(unsigned genomeSize) const {
+Ipp::getScalingFactor(unsigned genomeSizeRef) const {
     // Returns the scaling factor that produces a score of 0.5 for
     // halfLifeDistance_ in the reference species.
     // This scaling factor will be used in all other species in the graph, but
     // scaled to the according respective genome sizes.
-    return -1.0d * halfLifeDistance_ / (genomeSize * std::log(0.5));
+    return -1.0d * halfLifeDistance_ / (genomeSizeRef * std::log(0.5));
+}
+
+double
+Ipp::projectionScore(uint32_t loc,
+                     uint32_t leftBound,
+                     uint32_t rightBound,
+                     unsigned genomeSize,
+                     double scalingFactor) const {
+    // Anchors must be the locations of the up- and downstream anchors, not the
+    // data frame with ref and qry coordinates.
+    // The scaling factor determines how fast the function falls when moving
+    // away from an anchor.
+    // Ideally, we define a half-life X_half, i.e. at a distance of X_half, the
+    // model is at 0.5. With a scaling factor of 50 kb, X_half is at 20 kb (with
+    // 100 kb at 10 kb).
+    // score = 0.5^{minDist * genomeSizeRef / (genomeSize * halfLifeDistance_)}
+    uint32_t const minDist(std::min(loc - leftBound, rightBound - loc));
+    double const score(std::exp(-1.0d * minDist / (genomeSize*scalingFactor)));
+    assert(0 <= score && score <= 1);
+    return score;
 }
 
 void
@@ -182,14 +202,17 @@ Ipp::projectCoords(
     std::string const& refSpecies,
     std::string const& qrySpecies,
     std::vector<Coords> const& refCoords,
-    unsigned const nCores,
+    unsigned const nThreads,
     OnProjectCoordsJobDoneCallback const& onJobDoneCallback) const {
+    // Calls projectCoord() on the given list of refCoords.
+    // If nThreads > 1 then that many worker threads are started.
+    // For each completed job the onJobDoneCallback() is called with the result.
+    // The call to onJobDoneCallback() can come from any thread but no
+    // concurrent calls will be made.
 
     std::mutex mutex;
     std::vector<Coords> jobs(refCoords);
-
-    bool hadWorkerException(false);
-    std::exception workerException;
+    std::optional<std::exception> workerException;
 
     auto const worker = [&]() {
         while (true) {
@@ -200,13 +223,16 @@ Ipp::projectCoords(
                 if (jobs.empty()) {
                     // All jobs done.
                     return;
+                } else if (workerException) {
+                    // An exception occured on a different thread. Abort.
+                    return;
                 }
 
                 refCoord = jobs.back();
                 jobs.pop_back();
             }
 
-            // Execute the next job.
+            // Execute the next job (while not holding the mutex!).
             Ipp::CoordProjection coordProjection;
             try {
                 coordProjection =
@@ -214,7 +240,6 @@ Ipp::projectCoords(
             } catch (std::exception const& e) {
                 {
                     std::lock_guard const lockGuard(mutex);
-                    hadWorkerException = true;
                     workerException = e;
                     return;
                 }
@@ -228,13 +253,13 @@ Ipp::projectCoords(
         }
     };
 
-    if (nCores <= 1) {
-        worker();
+    if (nThreads <= 1) {
         // Just execute the worker in this thread.
+        worker();
     } else {
         // Create the threads.
         std::vector<std::thread> threads;
-        for (unsigned i(0); i < nCores; ++i) {
+        for (unsigned i(0); i < nThreads; ++i) {
             threads.emplace_back(worker);
         }
 
@@ -244,8 +269,8 @@ Ipp::projectCoords(
         }
 
         // Forward any exception that occured in a thread.
-        if (hadWorkerException) {
-            throw workerException;
+        if (workerException) {
+            throw *workerException;
         }
     }
 }
@@ -475,6 +500,9 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         qryLeftBound = qryUpEnd;
         qryRightBound = qryDownStart;
 
+        // ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry
+        // species it should be roughly the same as it is a projection of the
+        // reference.
         score = projectionScore(refLoc,
                                 refLeftBound,
                                 refRightBound,
@@ -482,13 +510,12 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                                 scalingFactor);
     }
     assert(refLeftBound <= refLoc && refLoc < refRightBound);
+
     double const relativeRefLoc(
         1.0d*(refLoc - refLeftBound) / (refRightBound - refLeftBound));
     uint32_t const qryLoc(
         qryLeftBound + relativeRefLoc*(qryRightBound - qryLeftBound));
-    // ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry
-    // species it should be roughly the same as it is a projection of the
-    // reference.
+    assert(qryLeftBound <= qryLoc && qryLoc <= qryRightBound);
 
     return {{score, {anchors->upstream.qryChrom, qryLoc}, *anchors}};
 }
@@ -592,6 +619,8 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
     };
     std::sort(closestAnchors.begin(), closestAnchors.end(), compLessRefStart);
 
+    // Compute longest collinear anchor subsequence (while considering both
+    // normal and reversed direction).
     closestAnchors = longestSubsequence(closestAnchors);
 
     // Set minimum number of collinear anchors to `minn` (for species pairs with
@@ -625,46 +654,14 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
                 break;
             }
         } else {
-            if(!closestOvAlnAnchor) {
-                closestOvAlnAnchor = &anchor;
-            } else {
-                auto const absDiff = [](uint32_t a, uint32_t b) {
-                    return a > b ? a-b : b-a;
-                };
-                uint32_t const minDistNew(
-                    std::min(absDiff(closestOvAlnAnchor->refStart, refLoc),
-                             absDiff(closestOvAlnAnchor->refEnd, refLoc)));
-                uint32_t const minDistOld(
-                    std::min(absDiff(anchor.refStart, refLoc),
-                             absDiff(anchor.refEnd, refLoc)));
-                if (minDistNew < minDistOld) {
-                    closestOvAlnAnchor = &anchor;
-                }
-            }
+            assert(!closestOvAlnAnchor
+                   &&"There should not be any overlapping ovAln anchors in the "
+                     "longest anchor subsequence");
+            closestOvAlnAnchor = &anchor;
         }
     }
     if (closestOvAlnAnchor) {
-        //uint32_t const locRelative(refLoc - closestOvAlnAnchor->refStart);
-        //bool const isPositiveStrand(
-        //    closestOvAlnAnchor->qryStart < closestOvAlnAnchor->qryEnd);
-
-        //PwalnEntry anchorUp(*closestOvAlnAnchor);
-        //anchorUp.refStart = refLoc - 1;
-        //anchorUp.refEnd = refLoc;
-        //anchorUp.qryStart = isPositiveStrand
-        //    ? closestOvAlnAnchor->qryStart + locRelative - 1
-        //    : closestOvAlnAnchor->qryStart - locRelative + 2;
-        //anchorUp.qryEnd = isPositiveStrand
-        //    ? closestOvAlnAnchor->qryStart + 1
-        //    : closestOvAlnAnchor->qryStart - 1;
-    
-        //PwalnEntry anchorDown(anchorUp);
-        //anchorDown.refStart += 1;
-        //anchorDown.refEnd += 1;
-        //anchorDown.qryStart += isPositiveStrand ? 1 : -1;
-        //anchorDown.qryEnd += isPositiveStrand ? 1 : -1;
-
-        //return {{anchorUp, anchorDown}};
+        // We found a direct mapping.
         return {{*closestOvAlnAnchor, *closestOvAlnAnchor}};
     } else {
         if (!closestUpstreamAnchor || !closestDownstreamAnchor) {
@@ -830,21 +827,4 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
     }
 
     return inc.size() >= dec.size() ? inc : dec;
-}
-
-double
-Ipp::projectionScore(uint32_t loc,
-                     uint32_t leftBound,
-                     uint32_t rightBound,
-                     unsigned genomeSize,
-                     double scalingFactor) const {
-    // Anchors must be the locations of the up- and downstream anchors, not the
-    // data frame with ref and qry coordinates.
-    // The scaling factor determines how fast the function falls when moving
-    // away from an anchor.
-    // Ideally, we define a half-life X_half, i.e. at a distance of X_half, the
-    // model is at 0.5. With a scaling factor of 50 kb, X_half is at 20 kb (with
-    // 100 kb at 10 kb).
-    uint32_t const d(std::min(loc - leftBound, rightBound - loc));
-    return std::exp(-1.0d * d / (genomeSize * scalingFactor));
 }

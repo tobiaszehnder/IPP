@@ -145,8 +145,13 @@ public:
         std::string const& refSpecies,
         std::string const& qrySpecies,
         std::vector<Coords> const& refCoords,
-        unsigned const nCores,
+        unsigned const nThreads,
         OnProjectCoordsJobDoneCallback const& onJobDoneCallback) const;
+    // Calls projectCoord() on the given list of refCoords.
+    // If nThreads > 1 then that many worker processes are started.
+    // For each completed job the onJobDoneCallback() is called with the result.
+    // The call to onJobDoneCallback() can come from any thread but no
+    // concurrent calls will be made.
 
 private:
     CoordProjection projectCoord(std::string const& refSpecies,
