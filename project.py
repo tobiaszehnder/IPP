@@ -125,20 +125,24 @@ def main():
 
     # Read the regions file and enqueue one projection job per line.
     ref_coords = []
+    ids = {}
     with open(args.regions_file) as regions_file:
-        for line in regions_file.readlines():
+        for i,line in enumerate(regions_file.readlines()):
             cols = line.split('\t')
             # define the coordinate as the center point between start and end coordinates
+            name = cols[3]
             refChrom = cols[0]
             refLoc = int(np.mean([int(cols[1]), int(cols[2])]))
             ref_coords.append((refChrom, refLoc))
+            # add the name of the region to a dict with refChrom:refLoc as the key for later translation
+            ids['{}:{}'.format(refChrom,refLoc)] = (i, name)
 
     pbar = None
     if not is_debug():
         pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
 
     results = pd.DataFrame(
-        columns=['coords_ref', 'coords_direct', 'coords_multi',
+        columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi',
                  'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
                  'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right',
@@ -163,7 +167,7 @@ def main():
         #     coords       string           "chrom:loc"
         #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
         #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
-        nonlocal results, unmapped
+        nonlocal results, unmapped, ids
         debug()
         debug("({})".format(len(results)))
         debug_shortest_path(multi_shortest_path, args.simple_coords)
@@ -172,7 +176,9 @@ def main():
 
         # handle unmapped region (multi_last_entry is not args.qry)
         if not multi_last_entry[0] == args.qry:
-            unmapped += result.index.tolist()
+            print(ref_coord)
+            print(coord_name_dict[ref_coord])
+            unmapped += coord_name_dict[ref_coord]
             return
 
         assert multi_last_entry[0] == args.qry
@@ -188,14 +194,15 @@ def main():
         multi_bridging_species = \
             ','.join([spe[0] for spe in multi_shortest_path[1:-1]])
   
-        values = [ref_coord, direct_coords, multi_coords,
+        values = [ids[ref_coord][1], ref_coord, direct_coords, multi_coords,
                   direct_score, multi_score,
                   direct_ref_anchors[0], direct_ref_anchors[1], multi_ref_anchors[0], multi_ref_anchors[1],
                   direct_qry_anchors[0], direct_qry_anchors[1], multi_qry_anchors[0], multi_qry_anchors[1],
                   multi_bridging_species]
+        idx = [ids[ref_coord][0]]
         results = results.append(
-                pd.DataFrame([values], columns=results.columns),
-                ignore_index=True)
+                pd.DataFrame([values], columns=results.columns, index=idx),
+                ignore_index=False)
   
         if pbar:
             pbar.update()
@@ -213,9 +220,10 @@ def main():
     debug(results.to_string())
 
     # write results table to file
+    print(results)
     columns_out=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi', 'bridging_species']
-    results = results.loc[:,columns_out]
+    results = results.sort_index().set_index('id').loc[:,columns_out]
     outfile_table = regions_file_basename + '.proj'
     results.to_csv(os.path.join(args.out_dir, outfile_table), sep='\t', header=True, float_format='%.3f')
 
