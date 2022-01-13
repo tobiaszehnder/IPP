@@ -4,6 +4,7 @@ import ipp
 import numpy as np
 import os
 import pandas as pd
+import tabulate
 import tqdm
 
 LOG_LEVEL_QUIET = 0
@@ -12,12 +13,74 @@ LOG_LEVEL_DEBUG = 2
 
 log_level = LOG_LEVEL_LOG
 
+def is_log():
+    return log_level >= LOG_LEVEL_LOG
+
+def is_debug():
+    return log_level >= LOG_LEVEL_DEBUG
+
 def log(*args, **kwargs):
-    if log_level >= LOG_LEVEL_LOG:
+    if is_log():
         print(*args, **kwargs)
 def debug(*args, **kwargs):
-    if log_level >= LOG_LEVEL_DEBUG:
+    if is_debug():
         print(*args, **kwargs)
+
+def debug_shortest_path(shortest_path, simple):
+    # Prints the given shortest path.
+    # The "out anchors" are the ref coordinates of the anchors of the next
+    # shortest path entry.
+    # The "in anchors"  are the qry coordinates of the anchors of the current
+    # shortest path entry.
+    # If the up and down anchors are the same, then only one of them is printed.
+    # If simple is given, then the coords are shifted towards zero to make them
+    # more readable.
+    if not is_debug() or not len(shortest_path):
+        return
+
+    headers = ['species', 'score', 'chrom', 'in anchors (strand)', 'loc',
+               'out anchors (strand)']
+    data = []
+    for i in range(len(shortest_path)):
+        e = shortest_path[i]
+
+        def anchors_to_ints(anchors):
+            # Converts the ("upStart:upEnd", "downStart:downEnd") anchor tuple
+            # to an array [upStart, upEnd, downStart, downEnd].
+            return [int(i) for anchor in anchors for i in anchor.split(":")]
+
+        not_first = i > 0
+        not_last = i < (len(shortest_path) - 1)
+        in_anchors = anchors_to_ints(e[4]) if not_first else []
+        out_anchors = anchors_to_ints(shortest_path[i+1][3]) if not_last else []
+
+        min_coord = min(in_anchors + out_anchors) if simple else 0
+        in_anchors = [i - min_coord for i in in_anchors]
+        out_anchors = [i - min_coord for i in out_anchors]
+
+        def anchors_str(anchors):
+            # Returns the given anchors pair.
+            if not len(anchors):
+                # First in or last out
+                return ""
+
+            up_str = "{}-{}".format(anchors[0], anchors[1])
+            down_str = "{}-{}".format(anchors[2], anchors[3])
+            return "{} ({})".format(
+                    up_str if up_str == down_str else ", ".join([up_str, down_str]),
+                    "+" if anchors[0] < anchors[1] else "-")
+
+        in_anchors_str = anchors_str(in_anchors)
+        out_anchors_str = anchors_str(out_anchors)
+
+        chrom, loc = e[2].split(":")
+        loc = int(loc) - min_coord
+
+        data.append([e[0], e[1], chrom, in_anchors_str, loc, out_anchors_str])
+
+    debug(tabulate.tabulate(data, headers=headers, stralign="center"))
+    debug()
+
 
 def main():
     parser = argparse.ArgumentParser(description='Independent Point Projections (IPP).\nA method for projecting genomic point coordinates between genomes with large evolutionary distances.')
@@ -30,6 +93,7 @@ def main():
     parser.add_argument('--n_cores', type=int, default=1, help='number of CPUs')
     parser.add_argument('--quiet', action="store_true", help='do not produce any log output')
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
+    parser.add_argument('-s', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
     parser.add_argument('--data_dir', default='/project/ipp-data')
     args = parser.parse_args()
 
@@ -66,7 +130,7 @@ def main():
             ref_coords.append((refChrom, refLoc))
 
     pbar = None
-    if log_level < LOG_LEVEL_DEBUG:
+    if not is_debug():
         pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
 
     results = pd.DataFrame(
@@ -93,10 +157,10 @@ def main():
         #     coords       string           "chrom:loc"
         #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
         #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
+        nonlocal results
         debug()
-        debug(ref_coord)
-        for e in multi_shortest_path:
-            debug(e)
+        debug("({})".format(len(results)))
+        debug_shortest_path(multi_shortest_path, args.simple_coords)
   
         multi_last_entry = multi_shortest_path[-1] 
         assert multi_last_entry[0] == args.qry
@@ -117,7 +181,6 @@ def main():
                   direct_ref_anchors[0], direct_ref_anchors[1], multi_ref_anchors[0], multi_ref_anchors[1],
                   direct_qry_anchors[0], direct_qry_anchors[1], multi_qry_anchors[0], multi_qry_anchors[1],
                   multi_bridging_species]
-        nonlocal results
         results = results.append(
                 pd.DataFrame([values], columns=results.columns),
                 ignore_index=True)
@@ -135,10 +198,9 @@ def main():
         pbar.close()
   
     debug()
-    debug(results)
+    debug(results.to_string())
   
     ### TO DO:
-    ### name columns here and not in project_coord function
     ### use ids from bed column 4 as index names (this should be part of the Coord class anyways, implement with that)
     
     outfile = os.path.splitext(os.path.basename(args.regions_file))[0] + '.proj'
