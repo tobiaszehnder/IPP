@@ -226,7 +226,10 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
                                 refCoords,
                                 nThreads,
                                 onJobDone);
-    } catch (std::exception const&) {
+    } catch (std::exception const& e) {
+        if (!PyErr_Occurred()) {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        }
         return nullptr;
     }
 
