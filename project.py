@@ -179,17 +179,19 @@ def main():
         if pbar:
             pbar.update()
 
-        debug()
-        debug("({})".format(len(results)))
-        debug_shortest_path(multi_shortest_path, args.simple_coords)
-  
-        # handle unmapped region (multi_last_entry is not args.qry)
         coord_name = coord_names[ref_coord][1]
+
+        # handle unmapped region
+        debug()
         if not len(multi_shortest_path):
             log("no mapping found for {} ({})".format(coord_name, ref_coord))
+            debug()
             unmapped_regions.append(coord_name)
             return
 
+        debug("({})".format(coord_name))
+        debug_shortest_path(multi_shortest_path, args.simple_coords)
+  
         multi_last_entry = multi_shortest_path[-1]
         assert multi_last_entry[0] == args.qry
         multi_score = multi_last_entry[1]
