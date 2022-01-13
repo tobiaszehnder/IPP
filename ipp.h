@@ -176,8 +176,8 @@ private:
     double getScalingFactor(unsigned genomeSize) const;
 
     double projectionScore(uint32_t loc,
-                           uint32_t leftBound,
-                           uint32_t rightBound,
+                           uint32_t upBound,
+                           uint32_t downBound,
                            unsigned genomeSize,
                            double scalingFactor) const;
 

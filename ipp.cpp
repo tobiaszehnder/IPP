@@ -179,8 +179,8 @@ Ipp::getScalingFactor(unsigned genomeSizeRef) const {
 
 double
 Ipp::projectionScore(uint32_t loc,
-                     uint32_t leftBound,
-                     uint32_t rightBound,
+                     uint32_t upBound,
+                     uint32_t downBound,
                      unsigned genomeSize,
                      double scalingFactor) const {
     // Anchors must be the locations of the up- and downstream anchors, not the
@@ -191,7 +191,8 @@ Ipp::projectionScore(uint32_t loc,
     // model is at 0.5. With a scaling factor of 50 kb, X_half is at 20 kb (with
     // 100 kb at 10 kb).
     // score = 0.5^{minDist * genomeSizeRef / (genomeSize * halfLifeDistance_)}
-    uint32_t const minDist(std::min(loc - leftBound, rightBound - loc));
+    assert(upBound < downBound);
+    uint32_t const minDist(std::min(loc - upBound, downBound - loc));
     double const score(std::exp(-1.0d * minDist / (genomeSize*scalingFactor)));
     assert(0 <= score && score <= 1);
     return score;
@@ -461,60 +462,51 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
     // Compute the qryLoc by linear interpolation: Consider where refLoc lies
     // between the ref coords of the up- and downstream anchors and project that
     // to the qry coords of the anchors.
-    uint32_t refLeftBound, refRightBound, qryLeftBound, qryRightBound;
-    // The qry coords might be reversed (start > end). If the upstream
-    // anchor is reversed then the downstream anchor is, too.
-    bool const isQryReversed(anchors->upstream.isQryReversed());
-    uint32_t const qryUpStart(!isQryReversed
-                              ? anchors->upstream.qryStart
-                              : anchors->downstream.qryEnd);
-    uint32_t const qryUpEnd(!isQryReversed
-                            ? anchors->upstream.qryEnd
-                            : anchors->downstream.qryStart);
-    assert(qryUpStart < qryUpEnd);
+    // Note: The qry coords might be reversed (up.start > up.end). Either both
+    //       anchors are reversed or both are not.
+    //       The ref coords are never reversed.
+    assert(anchors->upstream.isQryReversed()
+           == anchors->downstream.isQryReversed());
+    uint32_t refUpBound, refDownBound, qryUpBound, qryDownBound;
     double score;
     if (anchors->upstream == anchors->downstream) {
         // refLoc lies on an aligment.
         //  [  up.ref  ]
         //  [ down.ref ]
         //          x
-        refLeftBound = anchors->upstream.refStart;
-        refRightBound = anchors->upstream.refEnd;
-        qryLeftBound = qryUpStart;
-        qryRightBound = qryUpEnd;
+        refUpBound = anchors->upstream.refStart;
+        refDownBound = anchors->upstream.refEnd;
+        qryUpBound = anchors->upstream.qryStart;
+        qryDownBound = anchors->upstream.qryEnd;
 
         score = 1.0d;
     } else {
         // [ up.ref ]  x    [ down.ref ]
-        uint32_t const qryDownStart(!isQryReversed
-                                    ? anchors->downstream.qryStart
-                                    : anchors->upstream.qryEnd);
-        uint32_t const qryDownEnd(!isQryReversed
-                                  ? anchors->downstream.qryEnd
-                                  : anchors->upstream.qryStart);
-        assert(qryUpEnd <= qryDownStart && qryDownStart < qryDownEnd);
-
-        refLeftBound= anchors->upstream.refEnd;
-        refRightBound = anchors->downstream.refStart; 
-        qryLeftBound = qryUpEnd;
-        qryRightBound = qryDownStart;
+        refUpBound= anchors->upstream.refEnd;
+        refDownBound = anchors->downstream.refStart; 
+        qryUpBound = anchors->upstream.qryEnd;
+        qryDownBound = anchors->downstream.qryStart;
 
         // ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry
         // species it should be roughly the same as it is a projection of the
         // reference.
         score = projectionScore(refLoc,
-                                refLeftBound,
-                                refRightBound,
+                                refUpBound,
+                                refDownBound,
                                 genomeSizes_.at(refSpecies),
                                 scalingFactor);
     }
-    assert(refLeftBound <= refLoc && refLoc < refRightBound);
+    assert(refUpBound <= refLoc && refLoc < refDownBound);
 
     double const relativeRefLoc(
-        1.0d*(refLoc - refLeftBound) / (refRightBound - refLeftBound));
+        1.0d*(refLoc - refUpBound) / (refDownBound - refUpBound));
+    bool const isQryReversed(anchors->upstream.isQryReversed());
     uint32_t const qryLoc(
-        qryLeftBound + relativeRefLoc*(qryRightBound - qryLeftBound));
-    assert(qryLeftBound <= qryLoc && qryLoc <= qryRightBound);
+        !isQryReversed
+        ? qryUpBound + relativeRefLoc*(qryDownBound - qryUpBound)
+        : qryUpBound - relativeRefLoc*(qryUpBound - qryDownBound));
+    assert((!isQryReversed && qryUpBound <= qryLoc && qryLoc <= qryDownBound)
+           ||(isQryReversed && qryUpBound >= qryLoc && qryLoc >= qryDownBound));
 
     return {{score, {anchors->upstream.qryChrom, qryLoc}, *anchors}};
 }
