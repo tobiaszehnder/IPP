@@ -232,23 +232,22 @@ Ipp::projectCoords(
                 jobs.pop_back();
             }
 
-            // Execute the next job (while not holding the mutex!).
-            Ipp::CoordProjection coordProjection;
             try {
-                coordProjection =
-                    projectCoord(refSpecies, qrySpecies, refCoord);
+                // Execute the next job (while not holding the mutex!).
+                Ipp::CoordProjection const coordProjection(
+                    projectCoord(refSpecies, qrySpecies, refCoord));
+
+                // Call the callback (while holding the mutex).
+                {
+                    std::lock_guard const lockGuard(mutex);
+                    onJobDoneCallback(refCoord, coordProjection);
+                }
             } catch (std::exception const& e) {
                 {
                     std::lock_guard const lockGuard(mutex);
                     workerException = e;
                     return;
                 }
-            }
-
-            // Call the callback.
-            {
-                std::lock_guard const lockGuard(mutex);
-                onJobDoneCallback(refCoord, coordProjection);
             }
         }
     };

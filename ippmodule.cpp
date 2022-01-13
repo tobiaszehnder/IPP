@@ -160,22 +160,25 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
         // Backtrace the shortest path from the reference to the given target
         // species (in reversed order).
         PyObject* const multiShortestPath(PyList_New(0));
-        std::string currentSpecies(qrySpecies);
-        while (!currentSpecies.empty()) {
-            Ipp::ShortestPathEntry const& current(
-                coordProjection.multiShortestPath.at(currentSpecies));
-            PyObject* const tuple(
-                Py_BuildValue("sds(ss)(ss)",
-                              currentSpecies.c_str(),
-                              current.score,
-                              coordsStr(current.coords).c_str(),
-                              refAnchorStr(current.anchors.upstream).c_str(),
-                              refAnchorStr(current.anchors.downstream).c_str(),
-                              qryAnchorStr(current.anchors.upstream).c_str(),
-                              qryAnchorStr(current.anchors.downstream).c_str()));
-            PyList_Append(multiShortestPath, tuple);
-            Py_DECREF(tuple);
-            currentSpecies = current.prevSpecies;
+        if (coordProjection.multiShortestPath.find(qrySpecies)
+            != coordProjection.multiShortestPath.end()) {
+            std::string currentSpecies(qrySpecies);
+            while (!currentSpecies.empty()) {
+                Ipp::ShortestPathEntry const& current(
+                    coordProjection.multiShortestPath.at(currentSpecies));
+                PyObject* const tuple(Py_BuildValue(
+                        "sds(ss)(ss)",
+                        currentSpecies.c_str(),
+                        current.score,
+                        coordsStr(current.coords).c_str(),
+                        refAnchorStr(current.anchors.upstream).c_str(),
+                        refAnchorStr(current.anchors.downstream).c_str(),
+                        qryAnchorStr(current.anchors.upstream).c_str(),
+                        qryAnchorStr(current.anchors.downstream).c_str()));
+                PyList_Append(multiShortestPath, tuple);
+                Py_DECREF(tuple);
+                currentSpecies = current.prevSpecies;
+            }
         }
 
         // Reverse the shortest path list to have it in the right order.

@@ -22,12 +22,21 @@ def is_log():
 def is_debug():
     return log_level >= LOG_LEVEL_DEBUG
 
+pbar = None
+def do_print(*args, **kwargs):
+    global pbar
+    if pbar:
+        pbar.clear()
+    print(*args, **kwargs)
+    if pbar:
+        pbar.refresh()
+
 def log(*args, **kwargs):
     if is_log():
-        print(*args, **kwargs)
+        do_print(*args, **kwargs)
 def debug(*args, **kwargs):
     if is_debug():
-        print(*args, **kwargs)
+        do_print(*args, **kwargs)
 
 def debug_shortest_path(shortest_path, simple):
     # Prints the given shortest path.
@@ -111,7 +120,6 @@ def main():
     assembly_dir = args.data_dir + '/assembly/'
     if not os.path.exists(args.out_dir):
         os.mkdir(args.out_dir)
-    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
 
     #input("about to init ipp")
     log("Loading pwaln file")
@@ -125,7 +133,7 @@ def main():
 
     # Read the regions file and enqueue one projection job per line.
     ref_coords = []
-    ids = {}
+    coord_names = {}
     with open(args.regions_file) as regions_file:
         for i,line in enumerate(regions_file.readlines()):
             cols = line.split('\t')
@@ -135,9 +143,9 @@ def main():
             refLoc = int(np.mean([int(cols[1]), int(cols[2])]))
             ref_coords.append((refChrom, refLoc))
             # add the name of the region to a dict with refChrom:refLoc as the key for later translation
-            ids['{}:{}'.format(refChrom,refLoc)] = (i, name)
+            coord_names['{}:{}'.format(refChrom,refLoc)] = (i, name)
 
-    pbar = None
+    global pbar
     if not is_debug():
         pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
 
@@ -147,7 +155,7 @@ def main():
                  'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
                  'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right',
                  'bridging_species'])
-    unmapped = []
+    unmapped_regions = []
     
     def on_job_done_callback(ref_coord,
                              direct_score,
@@ -167,20 +175,22 @@ def main():
         #     coords       string           "chrom:loc"
         #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
         #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
-        nonlocal results, unmapped, ids
+        nonlocal coord_names, results, unmapped_regions
+        if pbar:
+            pbar.update()
+
         debug()
         debug("({})".format(len(results)))
         debug_shortest_path(multi_shortest_path, args.simple_coords)
   
-        multi_last_entry = multi_shortest_path[-1]
-
         # handle unmapped region (multi_last_entry is not args.qry)
-        if not multi_last_entry[0] == args.qry:
-            print(ref_coord)
-            print(coord_name_dict[ref_coord])
-            unmapped += coord_name_dict[ref_coord]
+        coord_name = coord_names[ref_coord][1]
+        if not len(multi_shortest_path):
+            log("no mapping found for {} ({})".format(coord_name, ref_coord))
+            unmapped_regions.append(coord_name)
             return
 
+        multi_last_entry = multi_shortest_path[-1]
         assert multi_last_entry[0] == args.qry
         multi_score = multi_last_entry[1]
         multi_coords = multi_last_entry[2]
@@ -194,18 +204,15 @@ def main():
         multi_bridging_species = \
             ','.join([spe[0] for spe in multi_shortest_path[1:-1]])
   
-        values = [ids[ref_coord][1], ref_coord, direct_coords, multi_coords,
+        values = [coord_name, ref_coord, direct_coords, multi_coords,
                   direct_score, multi_score,
                   direct_ref_anchors[0], direct_ref_anchors[1], multi_ref_anchors[0], multi_ref_anchors[1],
                   direct_qry_anchors[0], direct_qry_anchors[1], multi_qry_anchors[0], multi_qry_anchors[1],
                   multi_bridging_species]
-        idx = [ids[ref_coord][0]]
+        idx = [coord_names[ref_coord][0]]
         results = results.append(
                 pd.DataFrame([values], columns=results.columns, index=idx),
                 ignore_index=False)
-  
-        if pbar:
-            pbar.update()
   
     # Start the projection
     myIpp.project_coords(args.ref,
@@ -216,21 +223,22 @@ def main():
     if pbar:
         pbar.close()
   
-    debug()
-    debug(results.to_string())
+    log()
+    results = results.sort_index().set_index('id')
+    log(results.to_string())
+    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
 
     # write results table to file
-    print(results)
     columns_out=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi', 'bridging_species']
-    results = results.sort_index().set_index('id').loc[:,columns_out]
+    results = results.loc[:,columns_out]
     outfile_table = regions_file_basename + '.proj'
     results.to_csv(os.path.join(args.out_dir, outfile_table), sep='\t', header=True, float_format='%.3f')
 
-    # write list of IDs of unmapped regions to file
+    # write list of coord names of unmapped regions to file
     outfile_unmapped = regions_file_basename + '.unmapped'
     with open(outfile_unmapped, 'w') as f:
-        f.write('\n'.join(unmapped) + '\n')
+        f.write('\n'.join(unmapped_regions) + '\n')
 
     # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
     thresh = .95
