@@ -230,6 +230,7 @@ def project_genomic_location(ref, qry, ref_coords, score, pwaln, genome_size, sc
   ref_chrom = int(ref_coords.split(':')[0])
   ref_loc = int(ref_coords.split(':')[1])
   anchors = get_anchors(pwaln[ref][qry], ref_chrom, ref_loc)
+  print(ref, qry, anchors)
   if anchors.shape[0] < 2: # if only one anchor is found because of border region, return 0 score and empty coordinate string
     return 0., '' #, ',', ','
   ref_anchors = ','.join(anchors.apply(lambda x: '{}:{}'.format(x['ref_chrom'], x['ref_coord']), axis=1))

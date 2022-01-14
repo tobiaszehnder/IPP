@@ -149,7 +149,11 @@ rule lastal:
     params:
         lastdb_prefix='%s/{s1}' %lastdb_dir
     threads:
+<<<<<<< Updated upstream
         min(workflow.cores, 15)
+=======
+        min(workflow.cores, 50)
+>>>>>>> Stashed changes
     shell:
         '''
         /scratch/ngsvin/bin/Last/last-983/src/lastal -m10 -E0.05 -C2 -P {threads} {params.lastdb_prefix} {input.fa} > {output}
@@ -164,7 +168,11 @@ rule lastdb:
     params:
         prefix='{lastdb_dir}/{species}'
     threads:
+<<<<<<< Updated upstream
         min(workflow.cores, 80)
+=======
+        min(workflow.cores, 50)
+>>>>>>> Stashed changes
     shell:
         '/scratch/ngsvin/bin/Last/last-983/src/lastdb -P {threads} -c {params.prefix} {input}'
         
