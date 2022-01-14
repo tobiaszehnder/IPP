@@ -242,62 +242,35 @@ static PyMethodDef ippMethods[] = {
     {"set_half_life_distance", (PyCFunction)ippSetHalfLifeDistance, METH_VARARGS, "Sets the half-life distance"},
     {"project_coords", (PyCFunction)ippProjectCoords, METH_VARARGS, ""},
 
-    {nullptr, nullptr, 0, nullptr}        /* Sentinel */
+    {nullptr, nullptr, 0, nullptr} /* Sentinel */
 };
-static PyTypeObject PyIpp_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0)
+static PyType_Slot ippTypeSlots[] = {
+    {Py_tp_new, (void*)ippNew},
+    {Py_tp_dealloc, (void*)ippDealloc},
+    {Py_tp_methods, (void*)ippMethods},
 
-    "ipp.Ipp",                /* tp_name */
-    sizeof(PyIpp),            /* tp_basicsize */
-    0,                        /* tp_itemsize */
-    (destructor)ippDealloc,   /* tp_dealloc */
-    0,                        /* tp_vectorcall_offset */
-    0,                        /* tp_getattr */
-    0,                        /* tp_setattr */
-    0,                        /* tp_as_async */
-    0,                        /* tp_repr */
-    0,                        /* tp_as_number */
-    0,                        /* tp_as_sequence */
-    0,                        /* tp_as_mapping */
-    0,                        /* tp_hash */
-    0,                        /* tp_call */
-    0,                        /* tp_str */
-    0,                        /* tp_getattro */
-    0,                        /* tp_setattro */
-    0,                        /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,       /* tp_flags */
-    0,                        /* tp_doc */
-    0,                        /* tp_traverse */
-    0,                        /* tp_clear */
-    0,                        /* tp_richcompare */
-    0,                        /* tp_weaklistoffset */
-    0,                        /* tp_iter */
-    0,                        /* tp_iternext */
-    ippMethods,               /* tp_methods */
-    0,                        /* tp_members */
-    0,                        /* tp_getset */
-    0,                        /* tp_base */
-    0,                        /* tp_dict */
-    0,                        /* tp_descr_get */
-    0,                        /* tp_descr_set */
-    0,                        /* tp_dictoffset */
-    0,                        /* tp_init */
-    0,                        /* tp_alloc */
-    ippNew,                   /* tp_new */
+    {0, nullptr}                   /* Sentinel */
+};
+
+static PyType_Spec ippTypeSpec = {
+    "ipp.Ipp",                     /* name */
+    sizeof(PyIpp),                 /* basicsize */
+    0,                             /* itemsize */
+    Py_TPFLAGS_DEFAULT,            /* flags */
+    ippTypeSlots                   /* slots */
 };
 
 static struct PyModuleDef ippModule = {
     PyModuleDef_HEAD_INIT,
-    "ipp",   /* name of module */
-    nullptr, /* module documentation, may be NULL */
-    -1,      /* size of per-interpreter state of the module,
-                or -1 if the module keeps state in global variables. */
-    nullptr
+    "ipp",                         /* m_name */
+    nullptr,                       /* m_doc */
+    0                              /* m_size */
 };
 
 PyMODINIT_FUNC
 PyInit_ipp(void) {
-    if (PyType_Ready(&PyIpp_Type) < 0) {
+    PyObject* const PyIpp_Type(PyType_FromSpec(&ippTypeSpec));
+    if (!PyIpp_Type) {
         return nullptr;
     }
 
@@ -306,9 +279,9 @@ PyInit_ipp(void) {
         return nullptr;
     }
 
-    Py_INCREF(&PyIpp_Type);
-    if (PyModule_AddObject(m, "Ipp", (PyObject*)&PyIpp_Type) < 0) {
-        Py_DECREF(&PyIpp_Type);
+    Py_INCREF(PyIpp_Type);
+    if (PyModule_AddObject(m, "Ipp", PyIpp_Type) < 0) {
+        Py_DECREF(PyIpp_Type);
         Py_DECREF(m);
         return nullptr;
     }
