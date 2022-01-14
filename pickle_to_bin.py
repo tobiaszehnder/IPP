@@ -68,6 +68,7 @@ pbar = tqdm.tqdm(total=total_rows, leave=False)
 outfile = args.pickle_file.replace('.pkl', '.bin')
 with open(outfile, "wb") as out:
     def write_int(i, length):
+        assert i >= 0 and i < 2**(length*8)
         out.write(int(i).to_bytes(length, byteorder=sys.byteorder))
 
     def write_str(s):
