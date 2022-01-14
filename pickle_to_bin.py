@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 # Converts a pickle file to a binary pwalns file that is readable by the c++ ipp
 # module.
+
+FORMAT_VERSION = 1
+# Whenever you change the output format in an incompatible way, be sure to
+# increase the FORMAT_VERSION.
 #
 # Format:
+#   version                   [uint8]
+#   endianness_magic          [uint16]
 #   num_chomosomes            [uint16]
 #   {
 #     chrom_name              [null-terminated string]
@@ -74,6 +80,15 @@ with open(outfile, "wb") as out:
     def write_str(s):
         out.write(s.encode())
         out.write(b'\x00')
+
+    # Write the version of the output format that is used. That enables the
+    # consumer to verify that it does not read any outdated pwalns file.
+    write_int(FORMAT_VERSION, 1)
+
+    # Write a magic number to ensure that the endianness of the system that
+    # produced the pwalns file is the same as the endianness of the system that
+    # consumes it.
+    write_int(0xAFFE, 2)
 
     write_int(len(chroms), 2)
     for chrom in chroms:

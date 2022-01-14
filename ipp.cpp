@@ -45,6 +45,8 @@ Ipp::loadPwalns(std::string const& fileName) {
     // Reads the chromosomes and pwalns from the given file.
     // The data in the file is expected to be in the following format:
     //
+    // version                   [uint8]
+    // endianness_magic          [uint16]
     // num_chomosomes            [uint16]
     // {
     //   chrom_name              [null-terminated string]
@@ -69,12 +71,29 @@ Ipp::loadPwalns(std::string const& fileName) {
     //     } num_ref_chrom_entries times
     //   } num_sp2 times
     // } num_sp1 times
+    uint8_t expectedFormatVersion(1);
+
     chroms_.clear();
     pwalns_.clear();
 
     std::ifstream file(fileName, std::ios::in|std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("could not open the file");
+    }
+
+    // Read and check the format version.
+    auto const formatVersion(readInt<uint8_t>(file));
+    if (formatVersion != expectedFormatVersion) {
+        throw std::runtime_error(format("invalid version: %u (expected: %u)",
+                                        formatVersion, expectedFormatVersion));
+    }
+
+    // Read and check the endianness magic number.
+    auto const endiannessMagic(readInt<uint16_t>(file));
+    if (endiannessMagic != 0xAFFE) {
+        throw std::runtime_error(
+            "the endianness of the system that produced the pwalns file "
+            "differs from the enndianess of this system");
     }
 
     // Read the chromosomes.
