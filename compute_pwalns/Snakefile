@@ -33,25 +33,26 @@ except NameError:
     species_list=species_list.split(',')
     print(species_list)
     targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
-    if not pickle == False:
-        targets += ['%s/%s.pwaln.pkl' %(pkl_dir, pickle.replace(',','.'))] # pickle contains the ref-target species pair, e.g. danrer11,mm39
-    
+    if not pwaln_collection_name == False:
+        targets += ['%s/%s.pwaln.bin' %(alignment_dir, pwaln_collection_name.replace(',','.'))] # pwaln_collection_name contains the ref-target species pair, e.g. danrer11,mm39
+print(targets)    
 ### RULES ###
 
 rule all:
     input:
         targets
 
-rule pickle:
+rule collect_and_binarize_pwalns:
     input:
         [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     output:
-        '{pkl_dir}/{species_pair}.pwaln.pkl'
+        '{alignment_dir}/{species_pair}.pwaln.bin'
     params:
-        missing_pwalns='missing_pwalns_forbidden'
+        tbl_dir=tbl_dir,
+        species_list=','.join(species_list)
     shell:
-        'pickle_pwalns.py {output} {params} {input}'
-
+        'collect_pwalns.py {params.tbl_dir} {params.species_list} {output}'
+        
 rule chain_to_tbl:
     input:
         chain='%s/{s1}.{s2}.all.pre.chain' %chain_dir,
@@ -60,47 +61,6 @@ rule chain_to_tbl:
     shell:
         'chainToTbl.py {input} {output}'
         
-# rule axtnet_to_tbl:
-#     input:
-#         axtnet='%s/{s1}.{s2}.net.axt.gz' %axtnet_dir,
-#         s2_sizes=ancient('%s/{s2}.sizes' %assembly_dir)
-#     output:
-#         '{tbl_dir}/{s1}.{s2}.tbl'
-#     shell:
-#         'axtnet_to_tbl.R {input} {output} > {output}.log'
-        
-rule gzip:
-    input:
-        ancient('{basename}.net.axt')
-    output:
-        '{basename}.net.axt.gz'
-    shell:
-        'gzip -1 -c {input} > {output}'
-
-rule axt_net:
-    # netToAxt fails with too high chain ids (can only handle up to 268435456). In such cases, save an empty output file instead.
-    input:
-        noclassnet=ancient('%s/{s1}.{s2}.noClass.net' %net_dir),
-        allprechain=ancient('%s/{s1}.{s2}.all.pre.chain' %chain_dir),
-        twobit_s1=ancient('%s/{s1}.2bit' %assembly_dir),
-        twobit_s2=ancient('%s/{s2}.2bit' %assembly_dir)
-    output:
-        temp('{axtnet_dir}/{s1}.{s2}.net.axt')
-    shell:
-        '''
-        netToAxt {input} {output} &> {output}.log || echo -e "" > {output}
-        '''
-
-rule no_class_net:
-    input:
-        allprechain=ancient('%s/{s1}.{s2}.all.pre.chain' %chain_dir),
-        sizes_s1=ancient('%s/{s1}.sizes' %assembly_dir),
-        sizes_s2=ancient('%s/{s2}.sizes' %assembly_dir)
-    output:
-        '{net_dir}/{s1}.{s2}.noClass.net'
-    shell:
-        'chainNet {input} stdout /dev/null | netSyntenic stdin {output}'
-
 rule all_pre_chain:
     input:
         allchain=ancient('{chain_dir}/{s1}.{s2}.all.chain'),
@@ -138,7 +98,7 @@ rule maf_to_psl:
         'maf-convert psl {input} > {output}'
 
 # lastal sometimes prepends the genome build as a prefix to the chromosome names (no idea why). replaces those occurrences.
-rule lastal_maf:
+rule lastal:
     input:
         prj=ancient('%s/{s1}.prj' %lastdb_dir),
         fa=ancient('%s/{s2}.fa' %fasta_dir),
@@ -155,7 +115,7 @@ rule lastal_maf:
         remove_species_prefix {input.assembly_dir} {output}
         '''
 
-rule lastdb_prj:
+rule lastdb:
     input:
         ancient('%s/{species}.fa' %fasta_dir)
     output:

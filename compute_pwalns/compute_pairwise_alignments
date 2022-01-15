@@ -11,28 +11,28 @@ required (one of both):
 	-t TARGETS		Comma-separated list or file with target files (e.g. a list of chain files) to be produced
 
 optional:
-	-p CREATE_PKL		Pass a comma-separated reference and target species for creating a pickle file with all pairwise alignments (pickled dictionary of data frames). Used as input for IPP. (E.g. danRer11,mm39)
+	-c CREATE_PWALN_COLLECTION		Pass a comma-separated reference and target species for creating a pairwise alingment collection file. Used as input for IPP. (E.g. danRer11,mm39)
 	-d DATA_DIR		Output directory. The script will create a predefined folder structure in that directory
 	   			(e.g. separate folders for alignment files, fasta files, etc.)
 	-f FORCE		Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
 	-@ NTHREADS		Number of parallel threads
 	-n DRY_RUN		Flag for a dry run, i.e. only print the commands instead of executing
-	-! SNAKEMAKE_ARGS	Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
+	-! SNAKEMAKE_ARGS	Optional arguments for Snakemake in quotes, i.e. -! "--debug-dag --unlock -p"
 EOF
 }
 
 # parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
-pickle=False
+pwaln_collection_name=False
 data_dir="/project/ipp-data"
 force="none"
 nthreads="--cores 1"
 snakefile="/project/ipp/bin/compute_pwalns/Snakefile"
 snakemake_args="-pr --rerun-incomplete"
-while getopts ":s:t:p:d:f:@:!:n" OPTION; do
+while getopts ":s:t:c:d:f:@:!:n" OPTION; do
  	case $OPTION in
 		s) species=$OPTARG ;;
 		t) targets=$OPTARG ;;
-		p) pickle=$OPTARG ;;
+		c) pwaln_collection_name=$OPTARG ;;
 		d) data_dir=$(realpath $OPTARG) ;;
 		f) force=$OPTARG ;;
 		@) nthreads="--cores $OPTARG" ;;
@@ -69,7 +69,7 @@ snakemake \
 	--snakefile $snakefile \
 	--config \
 	$species_or_targets_arg \
-	pickle=$pickle \
+	pwaln_collection_name=$pwaln_collection_name \
 	data_dir=$data_dir \
 	$force_flag \
 	$snakemake_args \

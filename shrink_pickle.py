@@ -24,6 +24,7 @@ def create_ptr_to_chromosome(chrom_name):
         chroms.append(chrom_name)
         return idx
 
+# this doesn't need to be in the alignment pipeline, not important for binarized stuff
 for k,v in pwaln.items():
     for k2,df in v.items():
         df["ref_chrom"] = df["ref_chrom"].apply(create_ptr_to_chromosome)

@@ -32,7 +32,8 @@ def main():
                 # the chain file stores coordinates on the reverse strand from the right end, i.e. chrom_size - x.
                 if strand_qry == '-':
                     start_qry_i, end_qry_i = aln_block[4:]
-                    aln_block[4:] = chrom_size_qry - start_qry_i, chrom_size_qry - end_qry_i
+                    # the end coordinate is exclusive. an alignment block of size 3 at the end of a chain [0,5) should have the coordinates [2,5) (i.e. the positions 2,3,4). Hence, subtract 1!
+                    aln_block[4:] = chrom_size_qry - start_qry_i - 1, chrom_size_qry - end_qry_i - 1
                 f.write('\t'.join(map(str, aln_block)) + '\n')
                 if len(line) == 3:
                     x_ref += sum(line[:2]) # add block width plus gap size to current position
