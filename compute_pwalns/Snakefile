@@ -31,7 +31,6 @@ try:
     species_list = []
 except NameError:
     species_list=species_list.split(',')
-    print(species_list)
     targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     if not pwaln_collection_name == False:
         targets += ['%s/%s.pwaln.bin' %(alignment_dir, pwaln_collection_name.replace(',','.'))] # pwaln_collection_name contains the ref-target species pair, e.g. danrer11,mm39

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# This script collects a set of given pairwise alignment tables (.tbl format)
+# This script collects a set of given pairwise alignment tables (.tbl format),
+# converts chromosome names to indices,
 # and saves them in binary format readable for the c++ ipp module
 #
 # Format:
@@ -29,6 +30,10 @@
 #     } num_sp2 times
 #   } num_sp1 times
 
+FORMAT_VERSION = 1
+# Whenever you change the output format in an incompatible way, be sure to
+# increase the FORMAT_VERSION.
+
 import argparse
 import os
 import sys
@@ -48,7 +53,18 @@ cols = ['ref_chrom','ref_start','ref_end','qry_chrom','qry_start','qry_end']
 species_list = args.species_list.split(',')
 def get_tbl_path(ref,qry):
   return os.path.join(args.tbl_dir, '{}.{}.tbl'.format(ref, qry))
-pwalns = {ref: {qry: pd.read_csv(get_tbl_path(ref,qry), sep='\t', header=None, names=cols) for qry in species_list if not ref == qry} for ref in species_list}
+print("Reading pairwise alignment tables")
+total_files = len(species_list) * (len(species_list) - 1)
+pbar = tqdm.tqdm(total=total_files, leave=False)
+pwalns = {}
+for ref in species_list:
+  if not ref in pwalns.keys():
+    pwalns[ref] = {}
+  for qry in species_list:
+    if ref == qry:
+      continue
+    pwalns[ref][qry] = pd.read_csv(get_tbl_path(ref,qry), sep='\t', header=None, names=cols)
+    pbar.update()
 
 # change chromosome names to indices
 chroms = []
@@ -63,6 +79,8 @@ def create_ptr_to_chromosome(chrom_name):
     chroms_map[chrom_name] = idx
     chroms.append(chrom_name)
     return idx
+pbar = tqdm.tqdm(total=total_files, leave=False)
+print("Converting chromosome names to indices")
 for ref,v in pwalns.items():
   for qry,df in v.items():
     df['ref_chrom'].apply(create_ptr_to_chromosome)
@@ -98,7 +116,16 @@ with open(args.outfile, "wb") as out:
   def write_str(s):
     out.write(s.encode())
     out.write(b'\x00')
-    
+
+  # Write the version of the output format that is used. That enables the
+  # consumer to verify that it does not read any outdated pwalns file.
+  write_int(FORMAT_VERSION, 1)
+
+  # Write a magic number to ensure that the endianness of the system that
+  # produced the pwalns file is the same as the endianness of the system that
+  # consumes it.
+  write_int(0xAFFE, 2)
+  
   write_int(len(chroms), 2)
   for chrom in chroms:
     write_str(chrom)
