@@ -115,28 +115,27 @@ def main():
     elif args.verbose:
         log_level = LOG_LEVEL_DEBUG
 
-
     # define variables and create output directory
     assembly_dir = args.data_dir + '/assembly/'
     if not os.path.exists(args.out_dir):
         os.mkdir(args.out_dir)
 
     #input("about to init ipp")
-    log("Loading pwaln file")
+    log("Loading pairwise alignments")
     myIpp = ipp.Ipp()
     myIpp.load_pwalns(args.path_pwaln)
     myIpp.load_genome_sizes(assembly_dir);
     myIpp.set_half_life_distance(args.half_life_distance)
 
     #input('Press enter to start')
-    log('Projecting regions from %s to %s' %(args.ref, args.qry))
+    log('Reading regions from %s' %(args.regions_file))
 
     # Read the regions file and enqueue one projection job per line.
     ref_coords = []
     coord_names = {}
     with open(args.regions_file) as regions_file:
         for i,line in enumerate(regions_file.readlines()):
-            cols = line.split('\t')
+            cols = line.strip().split('\t')
             # define the coordinate as the center point between start and end coordinates
             name = cols[3]
             refChrom = cols[0]
@@ -217,6 +216,7 @@ def main():
                 ignore_index=False)
   
     # Start the projection
+    log('Projecting regions from %s to %s' %(args.ref, args.qry))
     myIpp.project_coords(args.ref,
                          args.qry,
                          ref_coords,
