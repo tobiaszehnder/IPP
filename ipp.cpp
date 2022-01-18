@@ -222,7 +222,7 @@ Ipp::projectCoords(
     std::string const& qrySpecies,
     std::vector<Coords> const& refCoords,
     unsigned const nThreads,
-    OnProjectCoordsJobDoneCallback const& onJobDoneCallback) const {
+    OnProjectCoordsJobDoneCallback const& onJobDoneCallback) {
     // Calls projectCoord() on the given list of refCoords.
     // If nThreads > 1 then that many worker threads are started.
     // For each completed job the onJobDoneCallback() is called with the result.
@@ -232,6 +232,8 @@ Ipp::projectCoords(
     std::mutex mutex;
     std::vector<Coords> jobs(refCoords);
     std::exception_ptr workerException;
+
+    cancel_ = false;
 
     auto const worker = [&]() {
         while (true) {
@@ -244,6 +246,8 @@ Ipp::projectCoords(
                     return;
                 } else if (workerException) {
                     // An exception occured on a different thread. Abort.
+                    return;
+                } else if (cancel_) {
                     return;
                 }
 
@@ -289,6 +293,12 @@ Ipp::projectCoords(
     if (workerException) {
         std::rethrow_exception(workerException);
     }
+}
+
+void
+Ipp::cancel() {
+    // Cancel ongoing project_coords() call.
+    cancel_ = true;
 }
 
 Ipp::CoordProjection

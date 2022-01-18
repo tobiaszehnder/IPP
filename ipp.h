@@ -146,12 +146,15 @@ public:
         std::string const& qrySpecies,
         std::vector<Coords> const& refCoords,
         unsigned const nThreads,
-        OnProjectCoordsJobDoneCallback const& onJobDoneCallback) const;
+        OnProjectCoordsJobDoneCallback const& onJobDoneCallback);
     // Calls projectCoord() on the given list of refCoords.
     // If nThreads > 1 then that many worker processes are started.
     // For each completed job the onJobDoneCallback() is called with the result.
     // The call to onJobDoneCallback() can come from any thread but no
     // concurrent calls will be made.
+
+    void cancel();
+    // Cancel ongoing project_coords() call.
 
 private:
     CoordProjection projectCoord(std::string const& refSpecies,
@@ -186,6 +189,7 @@ private:
     Pwalns pwalns_;
     std::unordered_map<std::string, unsigned> genomeSizes_;
     unsigned halfLifeDistance_;
+    volatile bool cancel_;
 };
 
 template <typename ...Args>
