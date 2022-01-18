@@ -4,7 +4,7 @@ import os, sys
 data_dir = os.path.abspath('../ipp-data')
 for k,v in config.items():
     exec(k + '=v')
-       
+    
 # define directories
 assembly_dir = data_dir + '/assembly'
 alignment_dir = data_dir + '/alignment'
@@ -18,10 +18,10 @@ net_dir = alignment_dir + '/net'
 psl_dir = alignment_dir + '/psl'
 tbl_dir = alignment_dir + '/chainTbl'
 bed_dir = alignment_dir + '/bed'
-pkl_dir = alignment_dir + '/pkl'
+bin_dir = alignment_dir + '/bin'
 
 # make directories
-for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_dir, chain_dir, maf_dir, net_dir, psl_dir, tbl_dir, bed_dir, pkl_dir]:
+for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_dir, chain_dir, maf_dir, net_dir, psl_dir, tbl_dir, bed_dir, bin_dir]:
     if not os.path.exists(dr):
         os.makedirs(dr)
 
@@ -32,8 +32,8 @@ try:
 except NameError:
     species_list=species_list.split(',')
     targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
-    if not pwaln_collection_name == False:
-        targets += ['%s/%s.pwaln.bin' %(alignment_dir, pwaln_collection_name.replace(',','.'))] # pwaln_collection_name contains the ref-target species pair, e.g. danrer11,mm39
+    if create_pwaln_collection:
+        targets += ['{}/{}.{}.pwaln.bin'.format(bin_dir, ref, qry)]
 print(targets)    
 ### RULES ###
 
