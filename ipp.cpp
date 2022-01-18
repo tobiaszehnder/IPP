@@ -232,7 +232,7 @@ Ipp::projectCoords(
 
     std::mutex mutex;
     std::vector<Coords> jobs(refCoords);
-    std::optional<std::exception> workerException;
+    std::exception_ptr workerException;
 
     auto const worker = [&]() {
         while (true) {
@@ -262,12 +262,10 @@ Ipp::projectCoords(
                     std::lock_guard const lockGuard(mutex);
                     onJobDoneCallback(refCoord, coordProjection);
                 }
-            } catch (std::exception const& e) {
-                {
-                    std::lock_guard const lockGuard(mutex);
-                    workerException = e;
-                    return;
-                }
+            } catch (...) {
+                std::lock_guard const lockGuard(mutex);
+                workerException = std::current_exception();
+                return;
             }
         }
     };
@@ -286,11 +284,11 @@ Ipp::projectCoords(
         for (auto& thread : threads) {
             thread.join();
         }
+    }
 
-        // Forward any exception that occured in a thread.
-        if (workerException) {
-            throw *workerException;
-        }
+    // Forward any exception that occured in a worker.
+    if (workerException) {
+        std::rethrow_exception(workerException);
     }
 }
 
