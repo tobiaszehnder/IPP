@@ -145,8 +145,7 @@ def main():
             coord_names['{}:{}'.format(refChrom,refLoc)] = (i, name)
 
     global pbar
-    if not is_debug():
-        pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
+    pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
 
     results = pd.DataFrame(
         columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
@@ -175,8 +174,7 @@ def main():
         #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
         #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
         nonlocal coord_names, results, unmapped_regions
-        if pbar:
-            pbar.update()
+        pbar.update()
 
         coord_name = coord_names[ref_coord][1]
 
@@ -222,8 +220,7 @@ def main():
                          ref_coords,
                          args.n_cores,
                          on_job_done_callback)
-    if pbar:
-        pbar.close()
+    pbar.close()
   
     log()
     results = results.sort_index().set_index('id')
