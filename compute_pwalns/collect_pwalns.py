@@ -81,11 +81,18 @@ pbar = tqdm.tqdm(total=total_files, leave=False)
 print("Converting chromosome names to indices")
 for ref,v in pwalns.items():
   for qry,df in v.items():
-    df['ref_chrom'].apply(create_ptr_to_chromosome)
-    df['qry_chrom'].apply(create_ptr_to_chromosome)
+    df['ref_chrom'] = df['ref_chrom'].apply(create_ptr_to_chromosome)
+    df['qry_chrom'] = df['qry_chrom'].apply(create_ptr_to_chromosome)
+    pwalns[ref][qry] = df.astype({
+      "ref_chrom": np.uint16,
+      "ref_start": np.uint32,
+      "ref_end": np.uint32,
+      "qry_chrom": np.uint16,
+      "qry_start": np.uint32,
+      "qry_end": np.uint32})
 
 # Compute the total number of rows to complete.
-print("Sorting and removing duplicates from the pwalns")
+print("Sorting pairwise alignments and removing duplicates")
 total_pwalns = 0
 for _, v in pwalns.items():
     total_pwalns += len(v)
@@ -105,7 +112,7 @@ for _, v in pwalns.items():
 pbar.close()
 
 # Write the binary output file.
-print("Writing the output file")
+print("Writing output to %s" %args.outfile)
 pbar = tqdm.tqdm(total=total_rows, leave=False)
 with open(args.outfile, "wb") as out:
   def write_int(i, length):
