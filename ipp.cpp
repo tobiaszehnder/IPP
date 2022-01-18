@@ -210,7 +210,6 @@ Ipp::projectionScore(uint32_t loc,
     // model is at 0.5. With a scaling factor of 50 kb, X_half is at 20 kb (with
     // 100 kb at 10 kb).
     // score = 0.5^{minDist * genomeSizeRef / (genomeSize * halfLifeDistance_)}
-    assert(upBound < downBound);
     uint32_t const minDist(std::min(loc - upBound, downBound - loc));
     double const score(std::exp(-1.0d * minDist / (genomeSize*scalingFactor)));
     assert(0 <= score && score <= 1);
@@ -482,27 +481,44 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
     // Note: The qry coords might be reversed (up.start > up.end). Either both
     //       anchors are reversed or both are not.
     //       The ref coords are never reversed.
-    assert(anchors->upstream.isQryReversed()
-           == anchors->downstream.isQryReversed());
-    uint32_t refUpBound, refDownBound, qryUpBound, qryDownBound;
+    bool const isQryReversed(anchors->upstream.isQryReversed());
+    uint32_t qryLoc;
     double score;
     if (anchors->upstream == anchors->downstream) {
         // refLoc lies on an aligment.
         //  [  up.ref  ]
         //  [ down.ref ]
         //          x
-        refUpBound = anchors->upstream.refStart;
-        refDownBound = anchors->upstream.refEnd;
-        qryUpBound = anchors->upstream.qryStart;
-        qryDownBound = anchors->upstream.qryEnd;
+        uint32_t const refUpBound(anchors->upstream.refStart);
+        uint32_t const refDownBound(anchors->upstream.refEnd);
+        uint32_t const qryUpBound(anchors->upstream.qryStart);
+        uint32_t const qryDownBound(anchors->upstream.qryEnd);
+
+        assert(refUpBound <= refLoc && refLoc <= refDownBound);
+
+        // Both endpoints are inclusive and the ref region is guaranteed to be
+        // the same size than the qry region.
+        uint32_t const refSize(refDownBound - refUpBound + 1);
+        uint32_t const qrySize(!isQryReversed
+                               ?(qryDownBound - qryUpBound + 1)
+                               :(qryUpBound - qryDownBound + 1));
+        assert(refSize == qrySize);
 
         score = 1.0d;
+        qryLoc = !anchors->upstream.isQryReversed()
+            ? qryUpBound + (refLoc - refUpBound)
+            : qryUpBound - (refLoc - refUpBound);
     } else {
         // [ up.ref ]  x    [ down.ref ]
-        refUpBound= anchors->upstream.refEnd;
-        refDownBound = anchors->downstream.refStart; 
-        qryUpBound = anchors->upstream.qryEnd;
-        qryDownBound = anchors->downstream.qryStart;
+        assert(anchors->upstream.isQryReversed()
+               == anchors->downstream.isQryReversed());
+        uint32_t const refUpBound(anchors->upstream.refEnd);
+        uint32_t const refDownBound(anchors->downstream.refStart); 
+        uint32_t const qryUpBound(anchors->upstream.qryEnd);
+        uint32_t const qryDownBound(anchors->downstream.qryStart);
+
+        // Both endpoints are exclusive.
+        assert(refUpBound < refLoc && refLoc < refDownBound);
 
         // ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry
         // species it should be roughly the same as it is a projection of the
@@ -512,18 +528,27 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                                 refDownBound,
                                 genomeSizes_.at(refSpecies),
                                 scalingFactor);
-    }
-    assert(refUpBound <= refLoc && refLoc < refDownBound);
 
-    double const relativeRefLoc(
-        1.0d*(refLoc - refUpBound) / (refDownBound - refUpBound));
-    bool const isQryReversed(anchors->upstream.isQryReversed());
-    uint32_t const qryLoc(
-        !isQryReversed
-        ? qryUpBound + relativeRefLoc*(qryDownBound - qryUpBound)
-        : qryUpBound - relativeRefLoc*(qryUpBound - qryDownBound));
-    assert((!isQryReversed && qryUpBound <= qryLoc && qryLoc <= qryDownBound)
-           ||(isQryReversed && qryUpBound >= qryLoc && qryLoc >= qryDownBound));
+        // +0.5 to bring the projection into the middle of the projected qry
+        // region of potentially different size:
+        //     up.refEnd = 10, down.refStart = 20
+        //     up.qryEnd = 110, down.qryStart = 150
+        //     refLoc = 11
+        //     qryLoc = 110 + ((11 - 10 + 0.5) / (20-10)) * (150-110)
+        //            = 110 + 1.5/10 * 40 = 116
+        //     (vs. 114 w/o the +0.5).
+        double const relativeRefLoc(
+            1.0d*(refLoc - refUpBound + 0.5) / (refDownBound - refUpBound));
+        bool const isQryReversed(anchors->upstream.isQryReversed());
+        qryLoc = !isQryReversed
+            ? qryUpBound + relativeRefLoc*(qryDownBound - qryUpBound)
+            : qryUpBound - relativeRefLoc*(qryUpBound - qryDownBound);
+
+        // <= and >= below in case the qry range is of size <= 1 (then the
+        // projection is onto the lower boundary).
+        assert((!isQryReversed && qryUpBound <= qryLoc && qryLoc < qryDownBound)
+               ||(isQryReversed && qryUpBound > qryLoc && qryLoc >= qryDownBound));
+    }
 
     return {{score, {anchors->upstream.qryChrom, qryLoc}, *anchors}};
 }
@@ -565,7 +590,7 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
         return {};
     }
     for (auto const& pwalnEntry : pwalnEntriesIt->second) {
-        if (pwalnEntry.refEnd <= refLoc) { // refEnd is exclusive
+        if (pwalnEntry.refEnd < refLoc) { // refEnd is inclusive
             // upstream anchor
             // [ anchor ]    x
             anchorsUpstream.insert(pwalnEntry);
@@ -653,7 +678,7 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
     PwalnEntry const* closestOvAlnAnchor(nullptr);
     PwalnEntry const* closestDownstreamAnchor(nullptr);
     for (auto const& anchor : closestAnchors) {
-        if (anchor.refEnd <= refLoc) {
+        if (anchor.refEnd < refLoc) {
             if (!closestUpstreamAnchor
                 || closestUpstreamAnchor->refEnd < anchor.refEnd) {
                 closestUpstreamAnchor = &anchor;
@@ -667,9 +692,6 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
                 break;
             }
         } else {
-            assert(!closestOvAlnAnchor
-                   &&"There should not be any overlapping ovAln anchors in the "
-                     "longest anchor subsequence");
             closestOvAlnAnchor = &anchor;
         }
     }
@@ -728,7 +750,7 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
             continue;
         }
 
-        if (qryEnd(seq[m.back()]) <= qryStart(seq[i])) {
+        if (qryEnd(seq[m.back()]) < qryStart(seq[i])) {
             prev[i] = m.back();
             m.push_back(i);
             continue;
@@ -743,7 +765,7 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
         unsigned v(m.size()-1);
         while(u < v) {
             unsigned const mid((u + v) / 2);
-            if (qryEnd(seq[m[mid]]) <= qryStart(seq[i])) {
+            if (qryEnd(seq[m[mid]]) < qryStart(seq[i])) {
                 u = mid+1;
             } else {
                 v = mid;
@@ -828,13 +850,13 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
     // increasing/decreasing.
     uint32_t loc(0);
     for (auto const& e : inc) {
-        assert(loc <= e.qryStart);
+        assert((!loc && !e.qryStart) || loc < e.qryStart);
         assert(e.qryStart < e.qryEnd);
         loc = e.qryEnd;
     }
     loc = std::numeric_limits<uint32_t>::max();
     for (auto const& e : dec) {
-        assert(loc >= e.qryEnd);
+        assert(loc > e.qryEnd);
         assert(e.qryStart > e.qryEnd);
         loc = e.qryStart;
     }
