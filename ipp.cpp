@@ -559,7 +559,12 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
         compGreaterRefEnd);
     std::vector<PwalnEntry> ovAln;
     std::vector<PwalnEntry> anchorsDownstream;
-    for (auto const& pwalnEntry : pwaln.at(refCoords.chrom)) {
+    auto const pwalnEntriesIt(pwaln.find(refCoords.chrom));
+    if (pwalnEntriesIt == pwaln.end()) {
+        // No pwaln entry for this refCoords.chrom.
+        return {};
+    }
+    for (auto const& pwalnEntry : pwalnEntriesIt->second) {
         if (pwalnEntry.refEnd <= refLoc) { // refEnd is exclusive
             // upstream anchor
             // [ anchor ]    x
