@@ -34,7 +34,7 @@ except NameError:
     targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     if create_pwaln_collection:
         targets += ['{}/{}.{}.pwaln.bin'.format(bin_dir, ref, qry)]
-print(targets)    
+
 ### RULES ###
 
 rule all:

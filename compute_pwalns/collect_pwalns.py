@@ -90,6 +90,7 @@ for ref,v in pwalns.items():
       "qry_chrom": np.uint16,
       "qry_start": np.uint32,
       "qry_end": np.uint32})
+    pbar.update()
 
 # Compute the total number of rows to complete.
 print("Sorting pairwise alignments and removing duplicates")
