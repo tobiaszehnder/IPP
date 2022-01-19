@@ -168,7 +168,9 @@ private:
         double scalingFactor) const;
 
     std::optional<Anchors> getAnchors(Pwaln const& pwaln,
-                                      Coords const& refCoords) const;
+                                      std::string const& refSpecies,
+                                      Coords const& refCoords,
+                                      std::string const& qrySpecies) const;
 
     static std::vector<PwalnEntry> longestSubsequence(
         std::vector<PwalnEntry> const& seq);

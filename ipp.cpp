@@ -476,7 +476,8 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         return {};
     }
 
-    auto const anchors(getAnchors(it2->second, refCoords));
+    auto const anchors(
+        getAnchors(it2->second, refSpecies, refCoords, qrySpecies));
     if (!anchors) {
         // If no or only one anchor is found because of border region, return 0
         // score and empty coordinate string.
@@ -564,7 +565,10 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
 }
 
 std::optional<Ipp::Anchors>
-Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
+Ipp::getAnchors(Pwaln const& pwaln,
+                std::string const& refSpecies,
+                Coords const& refCoords,
+                std::string const& qrySpecies) const {
     // First define anchors upstream, downstream and ovAln, then do major-chrom
     // and collinearity test, then either return overlapping anchor or closest
     // anchors.
@@ -702,6 +706,29 @@ Ipp::getAnchors(Pwaln const& pwaln, Coords const& refCoords) const {
                 break;
             }
         } else {
+            if (closestOvAlnAnchor) {
+                // An overlapping direct mapping found.
+                std::cerr << std::endl;
+                std::cerr << format("WARNING: Overlapping direct mapping for "
+                                    "(%s -> %s @ %s:%u): ",
+                                    refSpecies.c_str(),
+                                    qrySpecies.c_str(),
+                                    chroms_.at(refCoords.chrom).c_str(),
+                                    refCoords.loc) << std::endl;
+
+                auto const printAnchor = [this](PwalnEntry const& anchor) {
+                    std::cerr << "    refStart: " << anchor.refStart << std::endl;
+                    std::cerr << "    refEnd: " << anchor.refEnd << std::endl;
+                    std::cerr << "    qryChrom: " << chroms_.at(anchor.qryChrom) << std::endl;
+                    std::cerr << "    qryStart: " << anchor.qryStart << std::endl;
+                    std::cerr << "    qryEnd: " << anchor.qryEnd << std::endl;
+                };
+                std::cerr << "  anchor 1" << std::endl;
+                printAnchor(*closestOvAlnAnchor);
+                std::cerr << "  anchor 2" << std::endl;
+                printAnchor(anchor);
+                std::cerr << std::endl;
+            }
             closestOvAlnAnchor = &anchor;
         }
     }
