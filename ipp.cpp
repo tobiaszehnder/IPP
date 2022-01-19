@@ -230,7 +230,7 @@ Ipp::projectCoords(
     // concurrent calls will be made.
 
     std::mutex mutex;
-    std::vector<Coords> jobs(refCoords);
+    std::vector<Coords> jobs(refCoords.rbegin(), refCoords.rend());
     std::exception_ptr workerException;
 
     cancel_ = false;
