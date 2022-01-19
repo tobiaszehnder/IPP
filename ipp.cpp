@@ -888,13 +888,13 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
     uint32_t loc(0);
     for (auto const& e : inc) {
         assert((!loc && !e.qryStart) || loc < e.qryStart);
-        assert(e.qryStart < e.qryEnd);
+        assert(e.qryStart <= e.qryEnd);
         loc = e.qryEnd;
     }
     loc = std::numeric_limits<uint32_t>::max();
     for (auto const& e : dec) {
         assert(loc > e.qryEnd);
-        assert(e.qryStart > e.qryEnd);
+        assert(e.qryStart >= e.qryEnd);
         loc = e.qryStart;
     }
 
