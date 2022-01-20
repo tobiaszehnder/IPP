@@ -1,11 +1,21 @@
 #!/usr/bin/env python
-
+#
 # This script collects a set of given pairwise alignment tables (.tbl format),
 # converts chromosome names to indices,
 # and saves them in binary format readable for the c++ ipp module
-#
+import argparse
+import os
+import sys
+import tqdm
+import pandas as pd
+
+# Whenever you change the output format in an incompatible way, be sure to
+# increase the FORMAT_VERSION.
+FORMAT_VERSION = 2
 # Format:
-#   num_chomosomes            [uint16]
+#   version                   [uint8]
+#   endianness_magic          [uint16]
+#   num_chomosomes            [uint32]
 #   {
 #     chrom_name              [null-terminated string]
 #   } num_chromosomes times
@@ -17,32 +27,20 @@
 #       sp2_name              [null-terminated string]
 #       num_ref_chrom_entries [uint32]
 #       {
+#         ref_chrom           [uint32]
 #         num_pwaln_entries   [uint32]
 #         {
 #           ref_start         [uint32]
-#           ref_end           [uint32]
 #           qry_start         [uint32]
-#           qry_end           [uint32]
-#           ref_chrom         [uint16]
-#           qry_chrom         [uint16]
+#           qry_chrom         [uint32]
+#           length_and_strand [uint16]
 #         } num_pwaln_entries times
 #       } num_ref_chrom_entries times
 #     } num_sp2 times
 #   } num_sp1 times
 
-FORMAT_VERSION = 1
-# Whenever you change the output format in an incompatible way, be sure to
-# increase the FORMAT_VERSION.
-
-import argparse
-import os
-import sys
-import tqdm
-import pandas as pd
-
 # parse arguments
 parser = argparse.ArgumentParser()
-args, unknownargs = parser.parse_known_args()
 parser.add_argument('tbl_dir')
 parser.add_argument('species_list')
 parser.add_argument('outfile')
@@ -127,7 +125,7 @@ with open(args.outfile, "wb") as out:
   # consumes it.
   write_int(0xAFFE, 2)
   
-  write_int(len(chroms), 2)
+  write_int(len(chroms), 4)
   for chrom in chroms:
     write_str(chrom)
 
@@ -145,13 +143,20 @@ with open(args.outfile, "wb") as out:
       for row in df.itertuples(index=False):
         if row.ref_chrom != last_ref_chrom:
           # This is a new ref_chrom -> write a new "header"
+          write_int(row.ref_chrom, 4)
           write_int(ref_chrom_counts[row.ref_chrom], 4)
           last_ref_chrom = row.ref_chrom
+
+        # MSB of length_and_strand is 1 if the qry is on the negative strand.
+        assert row.ref_end >= row.ref_start
+        length = row.ref_end - row.ref_start + 1
+        assert length < 2**15, "The MSB must not be set by the length"
+        length_and_strand = length \
+                | ((1<<15) if row.qry_start > row.qry_end else 0)
+
         write_int(row.ref_start, 4)
-        write_int(row.ref_end, 4)
         write_int(row.qry_start, 4)
-        write_int(row.qry_end, 4)
-        write_int(row.ref_chrom, 2)
-        write_int(row.qry_chrom, 2)
+        write_int(row.qry_chrom, 4)
+        write_int(length_and_strand, 2)
         pbar.update()
 pbar.close()

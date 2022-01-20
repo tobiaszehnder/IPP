@@ -47,7 +47,7 @@ Ipp::loadPwalns(std::string const& fileName) {
     //
     // version                   [uint8]
     // endianness_magic          [uint16]
-    // num_chomosomes            [uint16]
+    // num_chomosomes            [uint32]
     // {
     //   chrom_name              [null-terminated string]
     // } num_chromosomes times
@@ -59,19 +59,18 @@ Ipp::loadPwalns(std::string const& fileName) {
     //     sp2_name              [null-terminated string]
     //     num_ref_chrom_entries [uint32]
     //     {
+    //       ref_chrom           [uint32]
     //       num_pwaln_entries   [uint32]
     //       {
     //         ref_start         [uint32]
-    //         ref_end           [uint32]
     //         qry_start         [uint32]
-    //         qry_end           [uint32]
-    //         ref_chrom         [uint16]
-    //         qry_chrom         [uint16]
+    //         qry_chrom         [uint32]
+    //         length_and_strand [uint16]
     //       } num_pwaln_entries times
     //     } num_ref_chrom_entries times
     //   } num_sp2 times
     // } num_sp1 times
-    uint8_t expectedFormatVersion(1);
+    uint8_t expectedFormatVersion(2);
 
     chroms_.clear();
     pwalns_.clear();
@@ -97,7 +96,7 @@ Ipp::loadPwalns(std::string const& fileName) {
     }
 
     // Read the chromosomes.
-    auto const numChromosomes(readInt<uint16_t>(file));
+    auto const numChromosomes(readInt<uint32_t>(file));
     chroms_.reserve(numChromosomes);
     for (unsigned i(0); i < numChromosomes; ++i) {
         chroms_.push_back(readString(file));
@@ -117,19 +116,49 @@ Ipp::loadPwalns(std::string const& fileName) {
 
             auto const numRefChromEntries(readInt<uint32_t>(file));
             for (unsigned k(0); k < numRefChromEntries; ++k) {
+                auto const refChrom(readInt<uint32_t>(file));
                 auto const numPwalnEntries(readInt<uint32_t>(file));
 
-                // Bulk-read the pwaln entries directly into the pwlanEntries
-                // vector.
-                std::vector<PwalnEntry> pwalnEntries(numPwalnEntries);
-                file.read(reinterpret_cast<char*>(pwalnEntries.data()),
-                          numPwalnEntries*sizeof(PwalnEntry));
+                // Bulk-read the pwaln entries into a temporary buffer.
+                class BufAnchor {
+                public:
+                   explicit BufAnchor(std::size_t size)
+                       : size(size)
+                       , buf(std::malloc(size))
+                   {}
+                   ~BufAnchor() {
+                       std::free(buf);
+                   }
+
+                   std::size_t const size;
+                   void* const buf;
+                };
+
+                #pragma pack(1)
+                class PackedPwalnEntry : public PwalnEntry {
+                    // Packed PwalnEntry that does not have the extra padding
+                    // bytes at the end which are used for alignment.
+                };
+                static_assert(sizeof(PackedPwalnEntry) == 14);
+                #pragma pack()
+
+                BufAnchor bufAnchor(numPwalnEntries*sizeof(PackedPwalnEntry));
+                auto const buf(
+                    reinterpret_cast<PackedPwalnEntry*>(bufAnchor.buf));
+
+                file.read(reinterpret_cast<char*>(buf), bufAnchor.size);
                 if (!file.good()) {
                     throw std::runtime_error("Unexpected EOF");
                 }
 
-                pwaln.insert({pwalnEntries[0].refChrom,
-                              std::move(pwalnEntries)});
+                // Copy the packed representation to the properly aligned
+                // vector.
+                static_assert(sizeof(PwalnEntry) == 16);
+                std::vector<PwalnEntry>& pwalnEntries(pwaln[refChrom]);
+                pwalnEntries.reserve(numPwalnEntries);
+                for (unsigned l(0); l < numPwalnEntries; ++l) {
+                    pwalnEntries.emplace_back(buf[l]);
+                }
             }
         }
     }
@@ -171,7 +200,7 @@ Ipp::setHalfLifeDistance(unsigned halfLifeDistance) {
     halfLifeDistance_ = halfLifeDistance;
 }
 
-uint16_t
+Ipp::ChromId
 Ipp::chromIdFromName(std::string const& chromName) const {
     // Looks up the given chromosome name in chroms_ and returns its id.
     auto const it(std::find(chroms_.begin(), chroms_.end(), chromName));
@@ -182,7 +211,7 @@ Ipp::chromIdFromName(std::string const& chromName) const {
 }
 
 std::string const&
-Ipp::chromName(uint16_t chromId) const {
+Ipp::chromName(ChromId chromId) const {
     // Returns the name of the chromosome with the given id.
     return chroms_.at(chromId);
 }
@@ -413,16 +442,16 @@ namespace {
 
 template<typename T>
 void
-updateChromCount(std::unordered_map<uint16_t, unsigned>& chromCount,
+updateChromCount(std::unordered_map<Ipp::ChromId, unsigned>& chromCount,
                  T const& v) {
     for (Ipp::PwalnEntry const& entry : v) {
-        ++chromCount[entry.qryChrom];
+        ++chromCount[entry.qryChrom()];
     }
 }
 
 template<typename T, typename... Args>
 void
-updateChromCount(std::unordered_map<uint16_t, unsigned>& chromCount,
+updateChromCount(std::unordered_map<Ipp::ChromId, unsigned>& chromCount,
                  T const& v,
                  Args const&... args) {
     updateChromCount(chromCount, v);
@@ -430,13 +459,13 @@ updateChromCount(std::unordered_map<uint16_t, unsigned>& chromCount,
 }
 
 template<typename... Args>
-uint16_t
+Ipp::ChromId
 computeMajorChrom(Args const&... args) {
-    std::unordered_map<uint16_t, unsigned> chromCount;
+    std::unordered_map<Ipp::ChromId, unsigned> chromCount;
     updateChromCount(chromCount, args...);
 
     unsigned maxCount(0);
-    uint16_t maxChrom(0);
+    Ipp::ChromId maxChrom(0);
     for (auto const& [chrom, count] : chromCount) {
         if (count > maxCount) {
             maxChrom = chrom;
@@ -448,9 +477,9 @@ computeMajorChrom(Args const&... args) {
 
 template<typename T>
 void
-removeEntriesWithNonMajorQryChromosome(T& anchors, uint16_t majorChrom) {
+removeEntriesWithNonMajorQryChromosome(T& anchors, Ipp::ChromId majorChrom) {
     for (auto it(anchors.begin()); it != anchors.end(); ) {
-        if (it->qryChrom != majorChrom) {
+        if (it->qryChrom() != majorChrom) {
             it = anchors.erase(it);
         } else {
             ++it;
@@ -492,7 +521,6 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
     // Note: The qry coords might be reversed (up.start > up.end). Either both
     //       anchors are reversed or both are not.
     //       The ref coords are never reversed.
-    bool const isQryReversed(anchors->upstream.isQryReversed());
     uint32_t qryLoc;
     double score;
     if (anchors->upstream == anchors->downstream) {
@@ -500,21 +528,14 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         //  [  up.ref  ]
         //  [ down.ref ]
         //          x
-        uint32_t const refUpBound(anchors->upstream.refStart);
-        uint32_t const refDownBound(anchors->upstream.refEnd);
-        uint32_t const qryUpBound(anchors->upstream.qryStart);
-        uint32_t const qryDownBound(anchors->upstream.qryEnd);
+        uint32_t const refUpBound(anchors->upstream.refStart());
+        uint32_t const refDownBound(anchors->upstream.refEnd());
+        uint32_t const qryUpBound(anchors->upstream.qryStart());
 
         assert(refUpBound <= refLoc && refLoc <= refDownBound);
 
         // Both endpoints are inclusive and the ref region is guaranteed to be
         // the same size than the qry region.
-        uint32_t const refSize(refDownBound - refUpBound + 1);
-        uint32_t const qrySize(!isQryReversed
-                               ?(qryDownBound - qryUpBound + 1)
-                               :(qryUpBound - qryDownBound + 1));
-        assert(refSize == qrySize);
-
         score = 1.0d;
         qryLoc = !anchors->upstream.isQryReversed()
             ? qryUpBound + (refLoc - refUpBound)
@@ -523,10 +544,10 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         // [ up.ref ]  x    [ down.ref ]
         assert(anchors->upstream.isQryReversed()
                == anchors->downstream.isQryReversed());
-        uint32_t const refUpBound(anchors->upstream.refEnd);
-        uint32_t const refDownBound(anchors->downstream.refStart); 
-        uint32_t const qryUpBound(anchors->upstream.qryEnd);
-        uint32_t const qryDownBound(anchors->downstream.qryStart);
+        uint32_t const refUpBound(anchors->upstream.refEnd());
+        uint32_t const refDownBound(anchors->downstream.refStart()); 
+        uint32_t const qryUpBound(anchors->upstream.qryEnd());
+        uint32_t const qryDownBound(anchors->downstream.qryStart());
 
         // Both endpoints are exclusive.
         assert(refUpBound < refLoc && refLoc < refDownBound);
@@ -561,7 +582,7 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                ||(isQryReversed && qryUpBound > qryLoc && qryLoc >= qryDownBound));
     }
 
-    return {{score, {anchors->upstream.qryChrom, qryLoc}, *anchors}};
+    return {{score, {anchors->upstream.qryChrom(), qryLoc}, *anchors}};
 }
 
 std::optional<Ipp::Anchors>
@@ -587,7 +608,7 @@ Ipp::getAnchors(Pwaln const& pwaln,
 
     auto const compGreaterRefEnd = [](PwalnEntry const& lhs,
                                       PwalnEntry const& rhs) {
-        return lhs.refEnd > rhs.refEnd;
+        return lhs.refEnd() > rhs.refEnd();
     };
 
     uint32_t const refLoc(refCoords.loc);
@@ -604,7 +625,7 @@ Ipp::getAnchors(Pwaln const& pwaln,
         return {};
     }
     for (auto const& pwalnEntry : pwalnEntriesIt->second) {
-        if (pwalnEntry.refEnd < refLoc) { // refEnd is inclusive
+        if (pwalnEntry.refEnd() < refLoc) { // refEnd is inclusive
             // upstream anchor
             // [ anchor ]    x
             anchorsUpstream.insert(pwalnEntry);
@@ -615,7 +636,7 @@ Ipp::getAnchors(Pwaln const& pwaln,
                 anchorsUpstream.erase(std::next(anchorsUpstream.begin(), topn),
                                       anchorsUpstream.end());
             }
-        } else if (refLoc < pwalnEntry.refStart) {
+        } else if (refLoc < pwalnEntry.refStart()) {
             // downstream anchor
             //    x     [ anchor ]
             anchorsDownstream.push_back(pwalnEntry);
@@ -642,7 +663,7 @@ Ipp::getAnchors(Pwaln const& pwaln,
 
     // MAJOR CHROMOSOME: Retain anchors that point to the majority chromosome in
     // top n of both up- and downstream anchors.
-    uint16_t const majorChrom(
+    ChromId const majorChrom(
         computeMajorChrom(ovAln, anchorsUpstream, anchorsDownstream));
     removeEntriesWithNonMajorQryChromosome(anchorsUpstream, majorChrom);
     removeEntriesWithNonMajorQryChromosome(ovAln, majorChrom);
@@ -666,8 +687,8 @@ Ipp::getAnchors(Pwaln const& pwaln,
     // as the anchorsUpstream were previously sorted by decreasing refEnd.
     auto const compLessRefStart = [](PwalnEntry const& lhs,
                                      PwalnEntry const& rhs) {
-        return std::tie(lhs.refStart, lhs.refEnd)
-            < std::tie(rhs.refStart, rhs.refEnd);
+        return std::forward_as_tuple(lhs.refStart(), lhs.refEnd())
+            < std::forward_as_tuple(rhs.refStart(), rhs.refEnd());
     };
     std::sort(closestAnchors.begin(), closestAnchors.end(), compLessRefStart);
 
@@ -692,14 +713,14 @@ Ipp::getAnchors(Pwaln const& pwaln,
     PwalnEntry const* closestOvAlnAnchor(nullptr);
     PwalnEntry const* closestDownstreamAnchor(nullptr);
     for (auto const& anchor : closestAnchors) {
-        if (anchor.refEnd < refLoc) {
+        if (anchor.refEnd() < refLoc) {
             if (!closestUpstreamAnchor
-                || closestUpstreamAnchor->refEnd < anchor.refEnd) {
+                || closestUpstreamAnchor->refEnd() < anchor.refEnd()) {
                 closestUpstreamAnchor = &anchor;
             }
-        } else if (refLoc < anchor.refStart) {
+        } else if (refLoc < anchor.refStart()) {
             if (!closestDownstreamAnchor
-                || anchor.refStart < closestDownstreamAnchor->refStart) {
+                || anchor.refStart() < closestDownstreamAnchor->refStart()) {
                 closestDownstreamAnchor = &anchor;
 
                 // The anchors that follow this one will only be worse.
@@ -717,11 +738,11 @@ Ipp::getAnchors(Pwaln const& pwaln,
                                     refCoords.loc) << std::endl;
 
                 auto const printAnchor = [this](PwalnEntry const& anchor) {
-                    std::cerr << "    refStart: " << anchor.refStart << std::endl;
-                    std::cerr << "    refEnd: " << anchor.refEnd << std::endl;
-                    std::cerr << "    qryChrom: " << chroms_.at(anchor.qryChrom) << std::endl;
-                    std::cerr << "    qryStart: " << anchor.qryStart << std::endl;
-                    std::cerr << "    qryEnd: " << anchor.qryEnd << std::endl;
+                    std::cerr << "    refStart: " << anchor.refStart() << std::endl;
+                    std::cerr << "    refEnd: " << anchor.refEnd() << std::endl;
+                    std::cerr << "    qryChrom: " << chroms_.at(anchor.qryChrom()) << std::endl;
+                    std::cerr << "    qryStart: " << anchor.qryStart() << std::endl;
+                    std::cerr << "    qryEnd: " << anchor.qryEnd() << std::endl;
                 };
                 std::cerr << "  anchor 1" << std::endl;
                 printAnchor(*closestOvAlnAnchor);
@@ -837,7 +858,7 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
 
     auto const printSeq = [](std::vector<PwalnEntry> const& seq) {
         for (auto const& e : seq) {
-            std::cerr << e.qryStart << ' ' << e.qryEnd << ' '
+            std::cerr << e.qryStart() << ' ' << e.qryEnd() << ' '
                       << (e.isQryReversed() ? "(-)" : "(+)") << std::endl;
         }
     };
@@ -853,10 +874,10 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
                 return !e.isQryReversed();
             },
             [](PwalnEntry const& e) {
-                return e.qryStart;
+                return e.qryStart();
             },
             [](PwalnEntry const& e) {
-                return e.qryEnd;
+                return e.qryEnd();
             }));
 
     std::vector<PwalnEntry> const dec(::longestSubsequence(
@@ -865,10 +886,10 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
                 return e.isQryReversed();
             },
             [](PwalnEntry const& e) {
-                return -1 * (int)e.qryStart;
+                return -1 * (int)e.qryStart();
             },
             [](PwalnEntry const& e) {
-                return -1 * (int)e.qryEnd;
+                return -1 * (int)e.qryEnd();
             }));
 
     if (debug) {
@@ -887,15 +908,15 @@ Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
     // increasing/decreasing.
     uint32_t loc(0);
     for (auto const& e : inc) {
-        assert((!loc && !e.qryStart) || loc < e.qryStart);
-        assert(e.qryStart <= e.qryEnd);
-        loc = e.qryEnd;
+        assert((!loc && !e.qryStart()) || loc < e.qryStart());
+        assert(e.qryStart() <= e.qryEnd());
+        loc = e.qryEnd();
     }
     loc = std::numeric_limits<uint32_t>::max();
     for (auto const& e : dec) {
-        assert(loc > e.qryEnd);
-        assert(e.qryStart >= e.qryEnd);
-        loc = e.qryStart;
+        assert(loc > e.qryEnd());
+        assert(e.qryStart() >= e.qryEnd());
+        loc = e.qryStart();
     }
 
     return inc.size() >= dec.size() ? inc : dec;

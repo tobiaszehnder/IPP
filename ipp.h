@@ -9,46 +9,71 @@
 
 class Ipp {
 public:
-    struct PwalnEntry {
-        // Attention: Keep the below order of the members for alignment reasons!
-        uint32_t refStart;
-        uint32_t refEnd;
-        uint32_t qryStart;
-        uint32_t qryEnd;
-        uint16_t refChrom;
-        uint16_t qryChrom;
+    using ChromId = uint32_t;
 
+    class PwalnEntry {
+    public:
         PwalnEntry()
-            : refStart(0)
-            , refEnd(0)
-            , qryStart(0)
-            , qryEnd(0)
-            , refChrom(0)
-            , qryChrom(0)
+            : refStart_(0)
+            , qryStart_(0)
+            , qryChrom_(0)
+            , lengthAndStrand_(0)
         {}
         PwalnEntry(PwalnEntry const& other)
-            : refStart(other.refStart)
-            , refEnd(other.refEnd)
-            , qryStart(other.qryStart)
-            , qryEnd(other.qryEnd)
-            , refChrom(other.refChrom)
-            , qryChrom(other.qryChrom)
+            : refStart_(other.refStart_)
+            , qryStart_(other.qryStart_)
+            , qryChrom_(other.qryChrom_)
+            , lengthAndStrand_(other.lengthAndStrand_)
         {}
 
+        uint32_t refStart() const {
+            return refStart_;
+        }
+        uint32_t refEnd() const {
+            // Inclusive. Ref is always increasing no matter the strand.
+            return refStart_ + length() - 1;
+        }
+
+        ChromId qryChrom() const {
+            return qryChrom_;
+        }
+        uint32_t qryStart() const {
+            return qryStart_;
+        }
+        uint32_t qryEnd() const {
+            return !isQryReversed()
+                ? qryStart_ + length() - 1
+                : qryStart_ - length() + 1;
+        }
+
+        uint16_t length() const {
+            // Remove the MSB bit from lengthAndStrand.
+            return lengthAndStrand_ & ~(1<<15);
+        }
         bool isQryReversed() const {
-            return qryStart > qryEnd;
+            // Returns true if the MSB of the lengthAndStrand is 1.
+            return lengthAndStrand_ & (1<<15);
         }
 
         bool operator==(PwalnEntry const& other) const {
-            return refChrom == other.refChrom
-                && refStart == other.refStart
-                && refEnd == other.refEnd
-                && qryChrom == other.qryChrom
-                && qryStart == other.qryStart
-                && qryEnd == other.qryEnd;
+            return refStart_ == other.refStart_
+                && qryStart_ == other.qryStart_
+                && qryChrom_ == other.qryChrom_
+                && lengthAndStrand_ == other.lengthAndStrand_;
         }
+
+    private:
+        // Attention: Keep the below order of the members for alignment reasons!
+        uint32_t refStart_;
+        uint32_t qryStart_;
+        ChromId qryChrom_;
+
+        // MSB is 1 for negative strand.
+        // Note: This is not the two's complement so don't treat this as a
+        // signed integer.
+        uint16_t lengthAndStrand_;
     };
-    using Pwaln = std::unordered_map<uint16_t, std::vector<PwalnEntry>>;
+    using Pwaln = std::unordered_map<ChromId, std::vector<PwalnEntry>>;
     using Pwalns = std::unordered_map<std::string, std::unordered_map<std::string, Pwaln>>;
     // The map of pairwise alignments: [sp1][sp2][ref_chrom] -> [PwalnEntry]
     // The entries in the vector are sorted by [refStart, qryChrom, qryStart].
@@ -65,21 +90,21 @@ public:
     void setHalfLifeDistance(unsigned halfLifeDistance);
     // Sets the half-life distance.
 
-    uint16_t chromIdFromName(std::string const& chromName) const;
+    ChromId chromIdFromName(std::string const& chromName) const;
     // Looks up the given chromosome name in chroms_ and returns its id.
 
-    std::string const& chromName(uint16_t chromId) const;
+    std::string const& chromName(ChromId chromId) const;
     // Returns the name of the chromosome with the given id.
 
     struct Coords {
-        uint16_t chrom;
+        ChromId chrom;
         uint32_t loc;
 
         Coords()
             : chrom(0)
             , loc(0)
         {}
-        Coords(uint16_t chrom, uint32_t loc) : chrom(chrom), loc(loc) {}
+        Coords(ChromId chrom, uint32_t loc) : chrom(chrom), loc(loc) {}
 
         bool operator<(Coords const& other) const {
             return std::tie(chrom, loc) < std::tie(other.chrom, other.loc);

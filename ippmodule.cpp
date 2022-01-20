@@ -184,10 +184,10 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
                           coords.loc);
         };
         auto const refAnchorStr = [](Ipp::PwalnEntry const& anchor) {
-            return format("%u:%u", anchor.refStart, anchor.refEnd);
+            return format("%u:%u", anchor.refStart(), anchor.refEnd());
         };
         auto const qryAnchorStr = [](Ipp::PwalnEntry const& anchor) {
-            return format("%u:%u", anchor.qryStart, anchor.qryEnd);
+            return format("%u:%u", anchor.qryStart(), anchor.qryEnd());
         };
 
         // Backtrace the shortest path from the reference to the given target
