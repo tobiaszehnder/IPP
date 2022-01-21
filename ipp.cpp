@@ -706,9 +706,6 @@ Ipp::getAnchors(Pwaln const& pwaln,
     // Check if the original ovAln is still present (or ever was) in the
     // filtered closestAnchors (that include a potential ovAln);
     // if not, it was an outlier alignment and was filtered out
-    // if yes, narrow it to the actual position of refLoc and its relative
-    // position in the qry such that the returned anchors have distance = 0 to
-    // refLoc.
     PwalnEntry const* closestUpstreamAnchor(nullptr);
     PwalnEntry const* closestOvAlnAnchor(nullptr);
     PwalnEntry const* closestDownstreamAnchor(nullptr);
@@ -727,29 +724,29 @@ Ipp::getAnchors(Pwaln const& pwaln,
                 break;
             }
         } else {
-            if (closestOvAlnAnchor) {
-                // An overlapping direct mapping found.
-                std::cerr << std::endl;
-                std::cerr << format("WARNING: Overlapping direct mapping for "
-                                    "(%s -> %s @ %s:%u): ",
-                                    refSpecies.c_str(),
-                                    qrySpecies.c_str(),
-                                    chroms_.at(refCoords.chrom).c_str(),
-                                    refCoords.loc) << std::endl;
+            // if (closestOvAlnAnchor) {
+            //     // An overlapping direct mapping found.
+            //     std::cerr << std::endl;
+            //     std::cerr << format("WARNING: Overlapping direct mapping for "
+            //                         "(%s -> %s @ %s:%u): ",
+            //                         refSpecies.c_str(),
+            //                         qrySpecies.c_str(),
+            //                         chroms_.at(refCoords.chrom).c_str(),
+            //                         refCoords.loc) << std::endl;
 
-                auto const printAnchor = [this](PwalnEntry const& anchor) {
-                    std::cerr << "    refStart: " << anchor.refStart() << std::endl;
-                    std::cerr << "    refEnd: " << anchor.refEnd() << std::endl;
-                    std::cerr << "    qryChrom: " << chroms_.at(anchor.qryChrom()) << std::endl;
-                    std::cerr << "    qryStart: " << anchor.qryStart() << std::endl;
-                    std::cerr << "    qryEnd: " << anchor.qryEnd() << std::endl;
-                };
-                std::cerr << "  anchor 1" << std::endl;
-                printAnchor(*closestOvAlnAnchor);
-                std::cerr << "  anchor 2" << std::endl;
-                printAnchor(anchor);
-                std::cerr << std::endl;
-            }
+            //     auto const printAnchor = [this](PwalnEntry const& anchor) {
+            //         std::cerr << "    refStart: " << anchor.refStart << std::endl;
+            //         std::cerr << "    refEnd: " << anchor.refEnd << std::endl;
+            //         std::cerr << "    qryChrom: " << chroms_.at(anchor.qryChrom) << std::endl;
+            //         std::cerr << "    qryStart: " << anchor.qryStart << std::endl;
+            //         std::cerr << "    qryEnd: " << anchor.qryEnd << std::endl;
+            //     };
+            //     std::cerr << "  anchor 1" << std::endl;
+            //     printAnchor(*closestOvAlnAnchor);
+            //     std::cerr << "  anchor 2" << std::endl;
+            //     printAnchor(anchor);
+            //     std::cerr << std::endl;
+            // }
             closestOvAlnAnchor = &anchor;
         }
     }
