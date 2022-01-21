@@ -8,6 +8,7 @@ import os
 import sys
 import tqdm
 import pandas as pd
+import numpy as np
 
 # Whenever you change the output format in an incompatible way, be sure to
 # increase the FORMAT_VERSION.
