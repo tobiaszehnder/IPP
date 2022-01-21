@@ -54,17 +54,15 @@ def debug_shortest_path(shortest_path, simple):
                'out anchors (strand)']
     data = []
     for i in range(len(shortest_path)):
-        e = shortest_path[i]
-
-        def anchors_to_ints(anchors):
-            # Converts the ("upStart:upEnd", "downStart:downEnd") anchor tuple
-            # to an array [upStart, upEnd, downStart, downEnd].
-            return [int(i) for anchor in anchors for i in anchor.split(":")]
+        spe = shortest_path[i]
 
         not_first = i > 0
         not_last = i < (len(shortest_path) - 1)
-        in_anchors = anchors_to_ints(e[4]) if not_first else []
-        out_anchors = anchors_to_ints(shortest_path[i+1][3]) if not_last else []
+        nxt_spe = shortest_path[i+1] if not_last else None
+        in_anchors = [spe.up_anchor.qry_start, spe.up_anchor.qry_end,
+                       spe.down_anchor.qry_start, spe.down_anchor.qry_end] if not_first else []
+        out_anchors = [nxt_spe.up_anchor.ref_start, nxt_spe.up_anchor.ref_end,
+                       nxt_spe.down_anchor.ref_start, nxt_spe.down_anchor.ref_end] if not_last else []
 
         min_coord = min(in_anchors + out_anchors) if simple else 0
         in_anchors = [i - min_coord for i in in_anchors]
@@ -85,10 +83,12 @@ def debug_shortest_path(shortest_path, simple):
         in_anchors_str = anchors_str(in_anchors)
         out_anchors_str = anchors_str(out_anchors)
 
-        chrom, loc = e[2].split(":")
-        loc = int(loc) - min_coord
-
-        data.append([e[0], e[1], chrom, in_anchors_str, loc, out_anchors_str])
+        data.append([spe.species,
+                     spe.score,
+                     spe.coords.chrom,
+                     in_anchors_str,
+                     spe.coords.loc - min_coord,
+                     out_anchors_str])
 
     debug(tabulate.tabulate(data, headers=headers, stralign="center"))
     debug()
@@ -141,49 +141,44 @@ def main():
             name = cols[3]
             refChrom = cols[0]
             refLoc = int(np.mean([int(cols[1]), int(cols[2])]))
-            ref_coords.append((refChrom, refLoc))
+            coords = ipp.Coords((refChrom, refLoc)) 
+            ref_coords.append(coords)
             # add the name of the region to a dict with refChrom:refLoc as the key for later translation
-            coord_names['{}:{}'.format(refChrom,refLoc)] = (i, name)
+            coord_names[coords] = (i, name)
 
     global pbar
     pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
 
-    results = {}
-    # results = pd.DataFrame(
-    #     columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
-    #              'score_direct', 'score_multi',
-    #              'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
-    #              'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right',
-    #              'bridging_species'])
+    results = []
     unmapped_regions = []
     
     def on_job_done_callback(ref_coord,
                              direct_score,
                              direct_coords,
-                             ref_anchors_direct,
-                             qry_anchors_direct,
+                             direct_up_anchor,
+                             direct_down_anchor,
                              multi_shortest_path):
-        # ref_coord:           string           "ref_chrom:ref_loc"
-        # direct_score:        float            [0-1]
-        # direct_coords:       string           "qry_chrom:qry_loc"
-        # direct_ref_anchors:  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
-        # direct_qry_anchors:  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
-        # multi_shortest_path: [ref, intermediate1, intermediate2, ..., qry]
-        #   Each entry:
+        # ref_coord:           ipp.Coords              (ref_chrom, ref_loc)
+        # direct_score:        float                   [0-1]
+        # direct_coords:       ipp.Coords              (qry_chrom, qry_loc)
+        # direct_up_anchor:    ipp.Anchor              (up.ref_start, up.ref_end, up.qry_start, up.qry_end)
+        # direct_down_anchor:  ipp.Anchor              (down.ref_start, down.ref_end, down.qry_start, down.qry_end)
+        # multi_shortest_path: [ipp.ShortestPathEntry] [ref, intermediate1, intermediate2, ..., qry]
         #     species      string           "spX"
         #     score        float            [0-1]
-        #     coords       string           "chrom:loc"
-        #     ref_anchors  (string, string) ("upRefStart:upRefEnd", "downRefStart:downRefEnd")
-        #     qry_anchors  (string, string) ("upQryStart:upQryEnd", "downQryStart:downQryEnd")
+        #     coords       ipp.Coords       (chrom, loc)
+        #     up_anchor    ipp.Anchor       (up.ref_start, up.ref_end, up.qry_start, up.qry_end)
+        #     down_anchor  ipp.Anchor       (down.ref_start, down.ref_end, down.qry_start, down.qry_end)
         nonlocal coord_names, results, unmapped_regions
         pbar.update()
 
-        coord_name = coord_names[ref_coord][1]
+        coord_idx, coord_name = coord_names[ref_coord]
 
         # handle unmapped region
         debug()
         if not len(multi_shortest_path):
-            # log("no mapping found for {} ({})".format(coord_name, ref_coord))
+            debug("no mapping found for {} ({}:{})".format(
+                  coord_name, ref_coord.chrom, ref_coord.loc))
             debug()
             unmapped_regions.append(coord_name)
             return
@@ -191,42 +186,36 @@ def main():
         debug("({})".format(coord_name))
         debug_shortest_path(multi_shortest_path, args.simple_coords)
   
-        multi_last_entry = multi_shortest_path[-1]
-        assert multi_last_entry[0] == args.qry
-        multi_score = multi_last_entry[1]
-        multi_coords = multi_last_entry[2]
-
-        # Ref anchors of the first species in the path (first non-reference species)
-        ref_anchors_multi = multi_shortest_path[1][3]
+        direct_refs = (direct_up_anchor.ref_start, direct_up_anchor.ref_end,
+                       direct_down_anchor.ref_start, direct_down_anchor.ref_end) \
+            if direct_up_anchor else (None, None, None, None)
+        direct_qrys = (direct_up_anchor.qry_start, direct_up_anchor.qry_end,
+                       direct_down_anchor.qry_start, direct_down_anchor.qry_end) \
+            if direct_up_anchor else (None, None, None, None)
   
-        # Qry anchors of the last species in the path.
-        qry_anchors_multi = multi_last_entry[4]
+        # The first intermediate species on the path.
+        multi_first_entry = multi_shortest_path[1]
+
+        # The qry species on the shortest path.
+        multi_last_entry = multi_shortest_path[-1]
+        assert multi_last_entry.species == args.qry
+        multi_score = multi_last_entry.score
+        multi_coords = multi_last_entry.coords
   
         multi_bridging_species = \
-            ','.join([spe[0] for spe in multi_shortest_path[1:-1]])
+            ','.join([spe.species for spe in multi_shortest_path[1:-1]])
 
-        def split_anchor_locs(anchor_string):
-            if anchor_string is None:
-                return None, None
-            return anchor_string.split(':')
-        
-        # reformat anchors from "start:end" to single coordinates
-        ref_anchor_direct_left_start, ref_anchor_direct_left_end = split_anchor_locs(ref_anchors_direct[0])
-        ref_anchor_direct_right_start, ref_anchor_direct_right_end = split_anchor_locs(ref_anchors_direct[1])
-        ref_anchor_multi_left_start, ref_anchor_multi_left_end = split_anchor_locs(ref_anchors_direct[0])
-        ref_anchor_multi_right_start, ref_anchor_multi_right_end = split_anchor_locs(ref_anchors_direct[1])
-        qry_anchor_direct_left_start, qry_anchor_direct_left_end = split_anchor_locs(qry_anchors_direct[0])
-        qry_anchor_direct_right_start, qry_anchor_direct_right_end = split_anchor_locs(qry_anchors_direct[1])
-        qry_anchor_multi_left_start, qry_anchor_multi_left_end = split_anchor_locs(qry_anchors_direct[0])
-        qry_anchor_multi_right_start, qry_anchor_multi_right_end = split_anchor_locs(qry_anchors_direct[1])
-        values = [coord_name, ref_coord, direct_coords, multi_coords,
-                  direct_score, multi_score, multi_bridging_species,
-                  ref_anchor_direct_left_start, ref_anchor_direct_left_end, ref_anchor_direct_right_start, ref_anchor_direct_right_end,
-                  ref_anchor_multi_left_start, ref_anchor_multi_left_end, ref_anchor_multi_right_start, ref_anchor_multi_right_end,
-                  qry_anchor_direct_left_start, qry_anchor_direct_left_end, qry_anchor_direct_right_start, qry_anchor_direct_right_end,
-                  qry_anchor_multi_left_start, qry_anchor_multi_left_end, qry_anchor_multi_right_start, qry_anchor_multi_right_end]
-        idx = coord_names[ref_coord][0]
-        results[idx] = values
+        results.append([
+            coord_idx,
+            coord_name, ref_coord, direct_coords, multi_coords,
+            direct_score, multi_score,
+            multi_bridging_species,
+            *direct_refs,
+            multi_first_entry.up_anchor.ref_start, multi_first_entry.up_anchor.ref_end,
+            multi_first_entry.down_anchor.ref_start, multi_first_entry.down_anchor.ref_end,
+            *direct_qrys,
+            multi_last_entry.up_anchor.ref_start, multi_last_entry.up_anchor.ref_end,
+            multi_last_entry.down_anchor.ref_start, multi_last_entry.down_anchor.ref_end])
   
     # Start the projection
     log('Projecting regions from %s to %s' %(args.ref, args.qry))
@@ -237,22 +226,24 @@ def main():
                          on_job_done_callback)
     pbar.close()
   
-    # convert results dict to dataframe
-    columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
-             'score_direct', 'score_multi', 'bridging_species', 
-             'ref_anchor_direct_left_start', 'ref_anchor_direct_left_end', 'ref_anchor_direct_right_start', 'ref_anchor_direct_right_end',
-             'ref_anchor_multi_left_start', 'ref_anchor_multi_left_end', 'ref_anchor_multi_right_start', 'ref_anchor_multi_right_end',
-             'qry_anchor_direct_left_start', 'qry_anchor_direct_left_end', 'qry_anchor_direct_right_start', 'qry_anchor_direct_right_end',
-             'qry_anchor_multi_left_start', 'qry_anchor_multi_left_end', 'qry_anchor_multi_right_start', 'qry_anchor_multi_right_end']
-    results_df = pd.DataFrame.from_dict(results, orient='index', columns=columns).sort_index().set_index('id')
-
-    # remove 'id' from column names and remove anchors from columns if flag for keeping them is not set
-    columns = columns[1:]
+    log()
+    results_df = pd.DataFrame(results, columns=[
+        'sort_idx',
+        'id', 'coords_ref', 'coords_direct', 'coords_multi',
+        'score_direct', 'score_multi', 'bridging_species', 
+        'ref_anchor_direct_left_start', 'ref_anchor_direct_left_end', 'ref_anchor_direct_right_start', 'ref_anchor_direct_right_end',
+        'ref_anchor_multi_left_start', 'ref_anchor_multi_left_end', 'ref_anchor_multi_right_start', 'ref_anchor_multi_right_end',
+        'qry_anchor_direct_left_start', 'qry_anchor_direct_left_end', 'qry_anchor_direct_right_start', 'qry_anchor_direct_right_end',
+        'qry_anchor_multi_left_start', 'qry_anchor_multi_left_end', 'qry_anchor_multi_right_start', 'qry_anchor_multi_right_end']) \
+            .sort_values(by=['sort_idx']) \
+            .drop(columns=['sort_idx']) \
+            .set_index('id')
     if not args.include_anchors_in_results:
         columns=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi', 'bridging_species']
-    results_df = results_df.loc[:,columns]
-    # log(results_df.to_string())
+        results_df = results_df.loc[:, columns]
+
+    debug(results_df.to_string())
 
     # write results table to file
     regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
@@ -286,7 +277,6 @@ def main():
     log('bed_qry created')
     bed_ref.to_csv(outfile_bed_ref, sep='\t', index=False, header=None, float_format='%.3f')
     bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
-    log('bla')
 if __name__ == '__main__':
     main()
 

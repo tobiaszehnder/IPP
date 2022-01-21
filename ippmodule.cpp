@@ -61,6 +61,10 @@ signalHandler(int signal) {
 
 extern "C" {
 
+PyTypeObject* PyIppAnchor_Type(nullptr);
+PyTypeObject* PyIppCoords_Type(nullptr);
+PyTypeObject* PyIppShortestPathEntry_Type(nullptr);
+
 struct PyIpp {
     PyObject_HEAD
 
@@ -178,16 +182,20 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
     auto const onJobDone = [&](Ipp::Coords const& refCoord,
                                Ipp::CoordProjection const& coordProjection) {
         // Call the given callback from the python script.
-        auto const coordsStr = [self](Ipp::Coords const& coords) {
-            return format("%s:%u",
-                          self->ipp.chromName(coords.chrom).c_str(),
-                          coords.loc);
+        auto const createPyAnchor = [](Ipp::PwalnEntry const& anchor) {
+            PyObject* const pyAnchor(PyStructSequence_New(PyIppAnchor_Type));
+            PyStructSequence_SetItem(pyAnchor, 0, PyLong_FromSize_t(anchor.refStart()));
+            PyStructSequence_SetItem(pyAnchor, 1, PyLong_FromSize_t(anchor.refEnd()));
+            PyStructSequence_SetItem(pyAnchor, 2, PyLong_FromSize_t(anchor.qryStart()));
+            PyStructSequence_SetItem(pyAnchor, 3, PyLong_FromSize_t(anchor.qryEnd()));
+            return pyAnchor;
         };
-        auto const refAnchorStr = [](Ipp::PwalnEntry const& anchor) {
-            return format("%u:%u", anchor.refStart(), anchor.refEnd());
-        };
-        auto const qryAnchorStr = [](Ipp::PwalnEntry const& anchor) {
-            return format("%u:%u", anchor.qryStart(), anchor.qryEnd());
+        auto const createPyCoords = [self](Ipp::Coords const& coords) {
+            PyObject* const pyCoords(PyStructSequence_New(PyIppCoords_Type));
+            std::string const chromName(self->ipp.chromName(coords.chrom));
+            PyStructSequence_SetItem(pyCoords, 0, PyUnicode_FromString(chromName.c_str()));
+            PyStructSequence_SetItem(pyCoords, 1, PyLong_FromSize_t(coords.loc));
+            return pyCoords;
         };
 
         // Backtrace the shortest path from the reference to the given target
@@ -199,17 +207,14 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
             while (!currentSpecies.empty()) {
                 Ipp::ShortestPathEntry const& current(
                     coordProjection.multiShortestPath.at(currentSpecies));
-                PyObject* const tuple(Py_BuildValue(
-                        "sds(ss)(ss)",
-                        currentSpecies.c_str(),
-                        current.score,
-                        coordsStr(current.coords).c_str(),
-                        refAnchorStr(current.anchors.upstream).c_str(),
-                        refAnchorStr(current.anchors.downstream).c_str(),
-                        qryAnchorStr(current.anchors.upstream).c_str(),
-                        qryAnchorStr(current.anchors.downstream).c_str()));
-                PyList_Append(multiShortestPath, tuple);
-                Py_DECREF(tuple);
+                PyObject* const pySpe(PyStructSequence_New(PyIppShortestPathEntry_Type));
+                PyStructSequence_SetItem(pySpe, 0, PyUnicode_FromString(currentSpecies.c_str()));
+                PyStructSequence_SetItem(pySpe, 1, PyFloat_FromDouble(current.score));
+                PyStructSequence_SetItem(pySpe, 2, createPyCoords(current.coords));
+                PyStructSequence_SetItem(pySpe, 3, createPyAnchor(current.anchors.upstream));
+                PyStructSequence_SetItem(pySpe, 4, createPyAnchor(current.anchors.downstream));
+                PyList_Append(multiShortestPath, pySpe);
+                Py_DECREF(pySpe);
                 currentSpecies = current.prevSpecies;
             }
         }
@@ -218,29 +223,15 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
         PyList_Reverse(multiShortestPath);
 
         // Call the callback function.
-        PyObject* argList;
-        if (coordProjection.direct.has_value()) {
-            argList = Py_BuildValue(
-                "sds(ss)(ss)O",
-                coordsStr(refCoord).c_str(),
-                coordProjection.direct->score,
-                coordsStr(coordProjection.direct->nextCoords).c_str(),
-                refAnchorStr(coordProjection.direct->anchors.upstream).c_str(),
-                refAnchorStr(coordProjection.direct->anchors.downstream).c_str(),
-                qryAnchorStr(coordProjection.direct->anchors.upstream).c_str(),
-                qryAnchorStr(coordProjection.direct->anchors.downstream).c_str(),
-                multiShortestPath);
-        } else {
-            argList = Py_BuildValue("sds(ss)(ss)O",
-                                    coordsStr(refCoord).c_str(),
-                                    0.0d,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    multiShortestPath);
-        }
+        bool const hasDirect(coordProjection.direct.has_value());
+        PyObject* const argList(Py_BuildValue(
+                "OdOOOO",
+                createPyCoords(refCoord),
+                hasDirect ? coordProjection.direct->score : 0.0d,
+                hasDirect ? createPyCoords(coordProjection.direct->nextCoords) : Py_None,
+                hasDirect ? createPyAnchor(coordProjection.direct->anchors.upstream) : Py_None,
+                hasDirect ? createPyAnchor(coordProjection.direct->anchors.downstream) : Py_None,
+                multiShortestPath));
         PyObject* const result(PyObject_CallObject(callback, argList));
         Py_DECREF(argList);
         Py_DECREF(multiShortestPath);
@@ -312,25 +303,127 @@ static struct PyModuleDef ippModule = {
     0                              /* m_size */
 };
 
+static PyStructSequence_Field ippAnchorFields[] = {
+    {"ref_start", nullptr},
+    {"ref_end", nullptr},
+    {"qry_start", nullptr},
+    {"qry_end", nullptr},
+
+    {nullptr, nullptr}             /* Sentinel */
+};
+static PyStructSequence_Desc ippAnchorTypeDesc = {
+    "ipp.Anchor",                  /* name */
+    nullptr,                       /* doc */
+    ippAnchorFields,               /* fields */
+    (sizeof(ippAnchorFields)/sizeof(ippAnchorFields[0]) - 1) /* n_in_sequence */
+};
+
+static PyStructSequence_Field ippCoordsFields[] = {
+    {"chrom", nullptr},
+    {"loc", nullptr},
+
+    {nullptr, nullptr}             /* Sentinel */
+};
+static PyStructSequence_Desc ippCoordsTypeDesc = {
+    "ipp.Coords",                  /* name */
+    nullptr,                       /* doc */
+    ippCoordsFields,               /* fields */
+    (sizeof(ippCoordsFields)/sizeof(ippCoordsFields[0]) - 1) /* n_in_sequence */
+};
+static PyObject*
+ippCoordsToStr(PyObject *self) {
+    PyObject* const format(PyUnicode_FromString("%s:%u"));
+    PyObject* const ret(PyUnicode_Format(format, self));
+    Py_DECREF(format);
+    return ret;
+}
+
+static PyStructSequence_Field ippShortestPathEntryFields[] = {
+    {"species", "species name [string]"},
+    {"score", "projection score [float]}"},
+    {"coords", "coords [Ipp.Coords]"},
+    {"up_anchor", "upstream anchor [Ipp.Anchor]"},
+    {"down_anchor", "downstream anchor [Ipp.Anchor]"},
+
+    {nullptr, nullptr}             /* Sentinel */
+};
+static PyStructSequence_Desc ippShortestPathEntryTypeDesc = {
+    "ipp.ShortestPathEntry",       /* name */
+    nullptr,                       /* doc */
+    ippShortestPathEntryFields,    /* fields */
+    (sizeof(ippShortestPathEntryFields)/sizeof(ippShortestPathEntryFields[0]) - 1) /* n_in_sequence */
+};
+
 PyMODINIT_FUNC
 PyInit_ipp(void) {
-    PyObject* const PyIpp_Type(PyType_FromSpec(&ippTypeSpec));
-    if (!PyIpp_Type) {
-        return nullptr;
-    }
+    class RefAnchor {
+        // Anchor that decrements all registered objects upon destruction.
+    public:
+        ~RefAnchor() {
+            for (PyObject* const obj : objs_) {
+                Py_DECREF(obj);
+            }
+        }
+        void add(PyObject* obj) {
+            if (obj) {
+                objs_.push_back(obj);
+            }
+        }
+        void release() {
+            objs_.clear();
+        }
+    private:
+        std::vector<PyObject*> objs_;
+    };
+    RefAnchor refAnchor;
 
+    // Create the module.
     PyObject* const m(PyModule_Create(&ippModule));
+    refAnchor.add(m);
     if (!m) {
         return nullptr;
     }
 
-    Py_INCREF(PyIpp_Type);
+    // Create the ipp.Ipp type and add it to the module.
+    PyObject* const PyIpp_Type(PyType_FromSpec(&ippTypeSpec));
+    refAnchor.add(PyIpp_Type);
+    if (!PyIpp_Type) {
+        return nullptr;
+    }
     if (PyModule_AddObject(m, "Ipp", PyIpp_Type) < 0) {
-        Py_DECREF(PyIpp_Type);
-        Py_DECREF(m);
         return nullptr;
     }
 
+    // Create the "ipp.Anchor" named tuple and add it to the module.
+    PyIppAnchor_Type = PyStructSequence_NewType(&ippAnchorTypeDesc);
+    if (!PyIppAnchor_Type) {
+        return nullptr;
+    }
+    if (PyModule_AddType(m, PyIppAnchor_Type) < 0) {
+        return nullptr;
+    }
+
+    // Create the "Ipp.Coords" named tuple and add it to the module.
+    PyIppCoords_Type = PyStructSequence_NewType(&ippCoordsTypeDesc);
+    if (!PyIppCoords_Type) {
+        return nullptr;
+    }
+    PyIppCoords_Type->tp_str = ippCoordsToStr;
+    if (PyModule_AddType(m, PyIppCoords_Type) < 0) {
+        return nullptr;
+    }
+
+    // Create the "Ipp.ShortestPathEntry" named tuple and add it to the module.
+    PyIppShortestPathEntry_Type =
+        PyStructSequence_NewType(&ippShortestPathEntryTypeDesc);
+    if (!PyIppShortestPathEntry_Type) {
+        return nullptr;
+    }
+    if (PyModule_AddType(m, PyIppShortestPathEntry_Type) < 0) {
+        return nullptr;
+    }
+
+    refAnchor.release();
     return m;
 }
 

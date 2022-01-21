@@ -7,13 +7,21 @@ def format_row_table_to_bed(row, which=('ref','qry')):
     # and the coordinates of the opposite species in the name field.
     colors = {'DC':'127,201,127', 'IC':'253,180,98', 'NC':'141,153,174', 'DC+':'255,0,0', 'IC+':'255,0,0', 'DC-':'30,30,30', 'IC-':'30,30,30', 'NC+':'141,153,174', 'NC-':'141,153,174'}
     if which == 'ref':
-      chrom, loc = row['coords_ref'].split(':')
+      coords = row['coords_ref']
       name_coords = row['coords_multi']
     else:
-      chrom, loc = row['coords_multi'].split(':')
+      coords = row['coords_multi']
       name_coords = row['coords_ref']
     name = '{}_{}_{}'.format(row.name, name_coords, row['conservation'])
-    bed_row = pd.Series([chrom, loc, int(loc)+1, name, row['score_multi'], '.', loc, int(loc)+1, colors[row['conservation']]])
+    bed_row = pd.Series([coords.chrom,
+                         coords.loc,
+                         coords.loc+1,
+                         name,
+                         row['score_multi'],
+                         '.',
+                         coords.loc,
+                         coords.loc+1,
+                         colors[row['conservation']]])
     return bed_row
 
 def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh=.95, maxgap=500):
@@ -23,8 +31,8 @@ def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh=.
   sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] == 1 else 'IC' if x['score_multi'] >= thresh else 'NC', axis=1).values
   
   # create PyRanges object of projections
-  df_multi = pd.DataFrame({'Chromosome': [x.split(':')[0] for x in df_projections['coords_multi']],
-                           'Start': [int(x.split(':')[1]) for x in df_projections['coords_multi']]})
+  df_multi = pd.DataFrame({'Chromosome': [x.chrom for x in df_projections['coords_multi']],
+                           'Start': [x.loc for x in df_projections['coords_multi']]})
   df_multi['End'] = df_multi['Start'] + 1
   pr_multi = pr.PyRanges(df_multi)
   
