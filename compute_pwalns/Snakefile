@@ -18,10 +18,10 @@ net_dir = alignment_dir + '/net'
 psl_dir = alignment_dir + '/psl'
 tbl_dir = alignment_dir + '/chainTbl'
 bed_dir = alignment_dir + '/bed'
-bin_dir = alignment_dir + '/bin'
+pwaln_dir = alignment_dir + '/pwaln'
 
 # make directories
-for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_dir, chain_dir, maf_dir, net_dir, psl_dir, tbl_dir, bed_dir, bin_dir]:
+for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_dir, chain_dir, maf_dir, net_dir, psl_dir, tbl_dir, bed_dir, pwaln_dir]:
     if not os.path.exists(dr):
         os.makedirs(dr)
 
@@ -33,7 +33,7 @@ except NameError:
     species_list=species_list.split(',')
     targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     if create_pwaln_collection:
-        targets += ['{}/{}.{}.pwaln.bin'.format(bin_dir, ref, qry)]
+        targets += ['{}/{}.{}.pwaln.bin'.format(pwaln_dir, ref, qry)]
 
 ### RULES ###
 
@@ -45,7 +45,7 @@ rule collect_and_binarize_pwalns:
     input:
         [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     output:
-        '{alignment_dir}/{species_pair}.pwaln.bin'
+        '{pwaln_dir}/{species_pair}.pwaln.bin'
     params:
         tbl_dir=tbl_dir,
         species_list=','.join(species_list)
