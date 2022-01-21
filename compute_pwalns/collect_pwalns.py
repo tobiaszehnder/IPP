@@ -84,15 +84,9 @@ for ref,v in pwalns.items():
   for qry,df in v.items():
     df['ref_chrom'] = df['ref_chrom'].apply(create_ptr_to_chromosome)
     df['qry_chrom'] = df['qry_chrom'].apply(create_ptr_to_chromosome)
-    pwalns[ref][qry] = df.astype({
-      "ref_chrom": np.uint16,
-      "ref_start": np.uint32,
-      "ref_end": np.uint32,
-      "qry_chrom": np.uint16,
-      "qry_start": np.uint32,
-      "qry_end": np.uint32})
     pbar.update()
-
+pbar.close()
+    
 # Compute the total number of rows to complete.
 print("Sorting pairwise alignments and removing duplicates")
 total_pwalns = 0
