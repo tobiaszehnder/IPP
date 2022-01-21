@@ -107,6 +107,7 @@ def main():
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
     parser.add_argument('-s', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
     parser.add_argument('--data_dir', default='/project/ipp-data')
+    parser.add_argument('-a', '--include_anchors_in_results', action='store_true', help='include anchors in results table')
     args = parser.parse_args()
 
     global log_level
@@ -147,12 +148,13 @@ def main():
     global pbar
     pbar = tqdm.tqdm(total=len(ref_coords), leave=False)
 
-    results = pd.DataFrame(
-        columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
-                 'score_direct', 'score_multi',
-                 'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
-                 'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right',
-                 'bridging_species'])
+    results = {}
+    # results = pd.DataFrame(
+    #     columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
+    #              'score_direct', 'score_multi',
+    #              'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
+    #              'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right',
+    #              'bridging_species'])
     unmapped_regions = []
     
     def on_job_done_callback(ref_coord,
@@ -181,7 +183,7 @@ def main():
         # handle unmapped region
         debug()
         if not len(multi_shortest_path):
-            log("no mapping found for {} ({})".format(coord_name, ref_coord))
+            # log("no mapping found for {} ({})".format(coord_name, ref_coord))
             debug()
             unmapped_regions.append(coord_name)
             return
@@ -204,14 +206,15 @@ def main():
             ','.join([spe[0] for spe in multi_shortest_path[1:-1]])
   
         values = [coord_name, ref_coord, direct_coords, multi_coords,
-                  direct_score, multi_score,
+                  direct_score, multi_score, multi_bridging_species,
                   direct_ref_anchors[0], direct_ref_anchors[1], multi_ref_anchors[0], multi_ref_anchors[1],
-                  direct_qry_anchors[0], direct_qry_anchors[1], multi_qry_anchors[0], multi_qry_anchors[1],
-                  multi_bridging_species]
-        idx = [coord_names[ref_coord][0]]
-        results = results.append(
-                pd.DataFrame([values], columns=results.columns, index=idx),
-                ignore_index=False)
+                  direct_qry_anchors[0], direct_qry_anchors[1], multi_qry_anchors[0], multi_qry_anchors[1]]
+        idx = coord_names[ref_coord][0]
+        results[idx] = values
+        # idx = [coord_names[ref_coord][0]]
+        # results = results.append(
+        #         pd.DataFrame([values], columns=results.columns, index=idx),
+        #         ignore_index=False)
   
     # Start the projection
     log('Projecting regions from %s to %s' %(args.ref, args.qry))
@@ -222,20 +225,28 @@ def main():
                          on_job_done_callback)
     pbar.close()
   
-    log()
-    results = results.sort_index().set_index('id')
-    log(results.to_string())
-    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
+    # convert results dict to dataframe
+    columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
+             'score_direct', 'score_multi', 'bridging_species', 
+             'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
+             'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right']
+    results_df = pd.DataFrame.from_dict(results, orient='index', columns=columns).sort_index().set_index('id')
+
+    # remove 'id' from column names and remove anchors from columns if flag for keeping them is not set
+    columns = columns[1:]
+    if not args.include_anchors_in_results:
+        columns=['coords_ref', 'coords_direct', 'coords_multi',
+                 'score_direct', 'score_multi', 'bridging_species']
+    results_df = results_df.loc[:,columns]
+    # log(results_df.to_string())
 
     # write results table to file
-    columns_out=['coords_ref', 'coords_direct', 'coords_multi',
-                 'score_direct', 'score_multi', 'bridging_species']
-    results = results.loc[:,columns_out]
+    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
     outfile_table = regions_file_basename + '.proj'
-    results.to_csv(os.path.join(args.out_dir, outfile_table), sep='\t', header=True, float_format='%.3f')
+    results_df.to_csv(os.path.join(args.out_dir, outfile_table), sep='\t', header=True, float_format='%.3f')
 
     # write list of coord names of unmapped regions to file
-    outfile_unmapped = regions_file_basename + '.unmapped'
+    outfile_unmapped = os.path.join(args.out_dir, regions_file_basename) + '.unmapped'
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
 
@@ -245,14 +256,14 @@ def main():
     target_regions = None
     if hasattr(args, 'target_bedfile'):
         target_regions = pr.read_bed(args.target_bedfile)
-    results['conservation'] = classify_conservation(results, target_regions, thresh, maxgap)
+    results_df['conservation'] = classify_conservation(results_df, target_regions, thresh, maxgap)
       
     # write results to bed files (bed9 format for both reference and target species)
     # name column (4):    string    "id_qryChrom:qryLoc_class"    e.g. "peak_75_chr3:3880_IC+"
     outfile_bed_ref = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.ref)
     outfile_bed_qry = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.qry)
-    bed_ref = results.apply(lambda row: format_row_table_to_bed(row, 'ref'), axis=1)
-    bed_qry = results.apply(lambda row: format_row_table_to_bed(row, 'qry'), axis=1)
+    bed_ref = results_df.apply(lambda row: format_row_table_to_bed(row, 'ref'), axis=1)
+    bed_qry = results_df.apply(lambda row: format_row_table_to_bed(row, 'qry'), axis=1)
     bed_ref.to_csv(outfile_bed_ref, sep='\t', index=False, header=None, float_format='%.3f')
     bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
     
