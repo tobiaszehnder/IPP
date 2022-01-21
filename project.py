@@ -160,8 +160,8 @@ def main():
     def on_job_done_callback(ref_coord,
                              direct_score,
                              direct_coords,
-                             direct_ref_anchors,
-                             direct_qry_anchors,
+                             ref_anchors_direct,
+                             qry_anchors_direct,
                              multi_shortest_path):
         # ref_coord:           string           "ref_chrom:ref_loc"
         # direct_score:        float            [0-1]
@@ -197,24 +197,36 @@ def main():
         multi_coords = multi_last_entry[2]
 
         # Ref anchors of the first species in the path (first non-reference species)
-        multi_ref_anchors = multi_shortest_path[1][3]
+        ref_anchors_multi = multi_shortest_path[1][3]
   
         # Qry anchors of the last species in the path.
-        multi_qry_anchors = multi_last_entry[4]
+        qry_anchors_multi = multi_last_entry[4]
   
         multi_bridging_species = \
             ','.join([spe[0] for spe in multi_shortest_path[1:-1]])
-  
+
+        def split_anchor_locs(anchor_string):
+            if anchor_string is None:
+                return None, None
+            return anchor_string.split(':')
+        
+        # reformat anchors from "start:end" to single coordinates
+        ref_anchor_direct_left_start, ref_anchor_direct_left_end = split_anchor_locs(ref_anchors_direct[0])
+        ref_anchor_direct_right_start, ref_anchor_direct_right_end = split_anchor_locs(ref_anchors_direct[1])
+        ref_anchor_multi_left_start, ref_anchor_multi_left_end = split_anchor_locs(ref_anchors_direct[0])
+        ref_anchor_multi_right_start, ref_anchor_multi_right_end = split_anchor_locs(ref_anchors_direct[1])
+        qry_anchor_direct_left_start, qry_anchor_direct_left_end = split_anchor_locs(qry_anchors_direct[0])
+        qry_anchor_direct_right_start, qry_anchor_direct_right_end = split_anchor_locs(qry_anchors_direct[1])
+        qry_anchor_multi_left_start, qry_anchor_multi_left_end = split_anchor_locs(qry_anchors_direct[0])
+        qry_anchor_multi_right_start, qry_anchor_multi_right_end = split_anchor_locs(qry_anchors_direct[1])
         values = [coord_name, ref_coord, direct_coords, multi_coords,
                   direct_score, multi_score, multi_bridging_species,
-                  direct_ref_anchors[0], direct_ref_anchors[1], multi_ref_anchors[0], multi_ref_anchors[1],
-                  direct_qry_anchors[0], direct_qry_anchors[1], multi_qry_anchors[0], multi_qry_anchors[1]]
+                  ref_anchor_direct_left_start, ref_anchor_direct_left_end, ref_anchor_direct_right_start, ref_anchor_direct_right_end,
+                  ref_anchor_multi_left_start, ref_anchor_multi_left_end, ref_anchor_multi_right_start, ref_anchor_multi_right_end,
+                  qry_anchor_direct_left_start, qry_anchor_direct_left_end, qry_anchor_direct_right_start, qry_anchor_direct_right_end,
+                  qry_anchor_multi_left_start, qry_anchor_multi_left_end, qry_anchor_multi_right_start, qry_anchor_multi_right_end]
         idx = coord_names[ref_coord][0]
         results[idx] = values
-        # idx = [coord_names[ref_coord][0]]
-        # results = results.append(
-        #         pd.DataFrame([values], columns=results.columns, index=idx),
-        #         ignore_index=False)
   
     # Start the projection
     log('Projecting regions from %s to %s' %(args.ref, args.qry))
@@ -228,8 +240,10 @@ def main():
     # convert results dict to dataframe
     columns=['id', 'coords_ref', 'coords_direct', 'coords_multi',
              'score_direct', 'score_multi', 'bridging_species', 
-             'ref_anchor_direct_left', 'ref_anchor_direct_right', 'ref_anchor_multi_left', 'ref_anchor_multi_right',
-             'qry_anchor_direct_left', 'qry_anchor_direct_right', 'qry_anchor_multi_left', 'qry_anchor_multi_right']
+             'ref_anchor_direct_left_start', 'ref_anchor_direct_left_end', 'ref_anchor_direct_right_start', 'ref_anchor_direct_right_end',
+             'ref_anchor_multi_left_start', 'ref_anchor_multi_left_end', 'ref_anchor_multi_right_start', 'ref_anchor_multi_right_end',
+             'qry_anchor_direct_left_start', 'qry_anchor_direct_left_end', 'qry_anchor_direct_right_start', 'qry_anchor_direct_right_end',
+             'qry_anchor_multi_left_start', 'qry_anchor_multi_left_end', 'qry_anchor_multi_right_start', 'qry_anchor_multi_right_end']
     results_df = pd.DataFrame.from_dict(results, orient='index', columns=columns).sort_index().set_index('id')
 
     # remove 'id' from column names and remove anchors from columns if flag for keeping them is not set
@@ -242,15 +256,18 @@ def main():
 
     # write results table to file
     regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
-    outfile_table = regions_file_basename + '.proj'
-    results_df.to_csv(os.path.join(args.out_dir, outfile_table), sep='\t', header=True, float_format='%.3f')
+    outfile_table = os.path.join(args.out_dir, regions_file_basename) + '.proj'
+    log('Writing projections table to:\n\t%s' %outfile_table)
+    results_df.to_csv(outfile_table, sep='\t', header=True, float_format='%.3f')
 
     # write list of coord names of unmapped regions to file
     outfile_unmapped = os.path.join(args.out_dir, regions_file_basename) + '.unmapped'
+    log('Writing unmapped regions to:\n\t%s' %outfile_unmapped)
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
 
     # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
+    log('Classifying projections')
     thresh = .95
     maxgap = 500
     target_regions = None
@@ -262,11 +279,14 @@ def main():
     # name column (4):    string    "id_qryChrom:qryLoc_class"    e.g. "peak_75_chr3:3880_IC+"
     outfile_bed_ref = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.ref)
     outfile_bed_qry = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.qry)
+    log('Writing output bed files:\n\t%s\n\t%s' %(outfile_bed_ref, outfile_bed_qry))
     bed_ref = results_df.apply(lambda row: format_row_table_to_bed(row, 'ref'), axis=1)
+    log('bed_ref created')
     bed_qry = results_df.apply(lambda row: format_row_table_to_bed(row, 'qry'), axis=1)
+    log('bed_qry created')
     bed_ref.to_csv(outfile_bed_ref, sep='\t', index=False, header=None, float_format='%.3f')
     bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
-    
+    log('bla')
 if __name__ == '__main__':
     main()
 
