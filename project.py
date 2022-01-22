@@ -9,6 +9,7 @@ import tabulate
 import tqdm
 import pyranges as pr
 from functions import *
+import sys
 
 LOG_LEVEL_QUIET = 0
 LOG_LEVEL_LOG = 1
@@ -186,13 +187,13 @@ def main():
         debug("({})".format(coord_name))
         debug_shortest_path(multi_shortest_path, args.simple_coords)
   
-        direct_refs = (direct_up_anchor.ref_start, direct_up_anchor.ref_end,
-                       direct_down_anchor.ref_start, direct_down_anchor.ref_end) \
-            if direct_up_anchor else (None, None, None, None)
-        direct_qrys = (direct_up_anchor.qry_start, direct_up_anchor.qry_end,
-                       direct_down_anchor.qry_start, direct_down_anchor.qry_end) \
-            if direct_up_anchor else (None, None, None, None)
-  
+        direct_refs = tuple(map(str, (direct_up_anchor.ref_start, direct_up_anchor.ref_end,
+                                      direct_down_anchor.ref_start, direct_down_anchor.ref_end))) \
+            if direct_up_anchor else ("", "", "", "")
+        direct_qrys = tuple(map(str, (direct_up_anchor.qry_start, direct_up_anchor.qry_end,
+                                      direct_down_anchor.qry_start, direct_down_anchor.qry_end))) \
+            if direct_up_anchor else ("", "", "", "")
+
         # The first intermediate species on the path.
         multi_first_entry = multi_shortest_path[1]
 
@@ -225,25 +226,28 @@ def main():
                          args.n_cores,
                          on_job_done_callback)
     pbar.close()
-  
-    log()
+
+    # create data frame from results dict
+    anchor_cols = ['ref_anchor_direct_left_start', 'ref_anchor_direct_left_end', 'ref_anchor_direct_right_start', 'ref_anchor_direct_right_end',
+                   'ref_anchor_multi_left_start', 'ref_anchor_multi_left_end', 'ref_anchor_multi_right_start', 'ref_anchor_multi_right_end',
+                   'qry_anchor_direct_left_start', 'qry_anchor_direct_left_end', 'qry_anchor_direct_right_start', 'qry_anchor_direct_right_end',
+                   'qry_anchor_multi_left_start', 'qry_anchor_multi_left_end', 'qry_anchor_multi_right_start', 'qry_anchor_multi_right_end']
     results_df = pd.DataFrame(results, columns=[
         'sort_idx',
         'id', 'coords_ref', 'coords_direct', 'coords_multi',
-        'score_direct', 'score_multi', 'bridging_species', 
-        'ref_anchor_direct_left_start', 'ref_anchor_direct_left_end', 'ref_anchor_direct_right_start', 'ref_anchor_direct_right_end',
-        'ref_anchor_multi_left_start', 'ref_anchor_multi_left_end', 'ref_anchor_multi_right_start', 'ref_anchor_multi_right_end',
-        'qry_anchor_direct_left_start', 'qry_anchor_direct_left_end', 'qry_anchor_direct_right_start', 'qry_anchor_direct_right_end',
-        'qry_anchor_multi_left_start', 'qry_anchor_multi_left_end', 'qry_anchor_multi_right_start', 'qry_anchor_multi_right_end']) \
+        'score_direct', 'score_multi', 'bridging_species',
+        *anchor_cols]) \
             .sort_values(by=['sort_idx']) \
             .drop(columns=['sort_idx']) \
             .set_index('id')
+    # exclude anchor columns if flag to keep them was not set
     if not args.include_anchors_in_results:
         columns=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi', 'bridging_species']
         results_df = results_df.loc[:, columns]
 
-    debug(results_df.to_string())
+    if is_debug():
+        debug(results_df.to_string())
 
     # write results table to file
     regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
@@ -265,18 +269,38 @@ def main():
     if hasattr(args, 'target_bedfile'):
         target_regions = pr.read_bed(args.target_bedfile)
     results_df['conservation'] = classify_conservation(results_df, target_regions, thresh, maxgap)
-      
+
+    def convert_df_to_bed(df, which):
+        # function to convert the projections from data frame to bed format
+        # which must be 'ref' or 'qry'
+        colors = {'DC':'127,201,127', 'IC':'253,180,98', 'NC':'141,153,174', 'DC+':'255,0,0', 'IC+':'255,0,0', 'DC-':'30,30,30', 'IC-':'30,30,30', 'NC+':'141,153,174', 'NC-':'141,153,174'}
+        coords_col = 'coords_ref'
+        opposite_coords_col = 'coords_multi'
+        if which == 'qry':
+            coords_col, opposite_coords_col = opposite_coords_col, coords_col
+        bed = pd.DataFrame(df[coords_col].tolist(), index=df.index).rename(columns={0:'chrom', 1:'start'})
+        bed['start'] = bed['start'].astype(int)
+        bed['end'] = bed['start'] + 1
+        bed['name'] = df.apply(lambda x: '_'.join([x.name, str(x[opposite_coords_col]), x['conservation']]), axis=1)
+        bed['score'] = df['score_multi']
+        bed['strand'] = '.'
+        bed['thickStart'] = bed['start']
+        bed['thickEnd'] = bed['end']
+        bed['itemRgb'] = df['conservation'].apply(lambda x: colors[x])
+        return bed
+    
     # write results to bed files (bed9 format for both reference and target species)
     # name column (4):    string    "id_qryChrom:qryLoc_class"    e.g. "peak_75_chr3:3880_IC+"
     outfile_bed_ref = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.ref)
     outfile_bed_qry = '{}.{}.bed'.format(os.path.join(args.out_dir, regions_file_basename), args.qry)
     log('Writing output bed files:\n\t%s\n\t%s' %(outfile_bed_ref, outfile_bed_qry))
-    bed_ref = results_df.apply(lambda row: format_row_table_to_bed(row, 'ref'), axis=1)
-    log('bed_ref created')
-    bed_qry = results_df.apply(lambda row: format_row_table_to_bed(row, 'qry'), axis=1)
-    log('bed_qry created')
+    bed_ref = convert_df_to_bed(results_df, 'ref')
+    bed_qry = convert_df_to_bed(results_df, 'qry')
     bed_ref.to_csv(outfile_bed_ref, sep='\t', index=False, header=None, float_format='%.3f')
     bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
+
+    log('Done')
+    
 if __name__ == '__main__':
     main()
 
