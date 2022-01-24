@@ -198,29 +198,20 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
             return pyCoords;
         };
 
-        // Backtrace the shortest path from the reference to the given target
-        // species (in reversed order).
-        PyObject* const multiShortestPath(PyList_New(0));
-        if (coordProjection.multiShortestPath.find(qrySpecies)
-            != coordProjection.multiShortestPath.end()) {
-            std::string currentSpecies(qrySpecies);
-            while (!currentSpecies.empty()) {
-                Ipp::ShortestPathEntry const& current(
-                    coordProjection.multiShortestPath.at(currentSpecies));
-                PyObject* const pySpe(PyStructSequence_New(PyIppShortestPathEntry_Type));
-                PyStructSequence_SetItem(pySpe, 0, PyUnicode_FromString(currentSpecies.c_str()));
-                PyStructSequence_SetItem(pySpe, 1, PyFloat_FromDouble(current.score));
-                PyStructSequence_SetItem(pySpe, 2, createPyCoords(current.coords));
-                PyStructSequence_SetItem(pySpe, 3, createPyAnchor(current.anchors.upstream));
-                PyStructSequence_SetItem(pySpe, 4, createPyAnchor(current.anchors.downstream));
-                PyList_Append(multiShortestPath, pySpe);
-                Py_DECREF(pySpe);
-                currentSpecies = current.prevSpecies;
-            }
+        // Translate the shortest path to a python list.
+        PyObject* const multiShortestPath(
+            PyList_New(coordProjection.multiShortestPath.size()));
+        for (unsigned i(0); i < coordProjection.multiShortestPath.size(); ++i) {
+            Ipp::ShortestPathEntry const& spe(
+                coordProjection.multiShortestPath[i]);
+            PyObject* const pySpe(PyStructSequence_New(PyIppShortestPathEntry_Type));
+            PyStructSequence_SetItem(pySpe, 0, PyUnicode_FromString(spe.species.c_str()));
+            PyStructSequence_SetItem(pySpe, 1, PyFloat_FromDouble(spe.score));
+            PyStructSequence_SetItem(pySpe, 2, createPyCoords(spe.coords));
+            PyStructSequence_SetItem(pySpe, 3, createPyAnchor(spe.anchors.upstream));
+            PyStructSequence_SetItem(pySpe, 4, createPyAnchor(spe.anchors.downstream));
+            PyList_SetItem(multiShortestPath, i, pySpe);
         }
-
-        // Reverse the shortest path list to have it in the right order.
-        PyList_Reverse(multiShortestPath);
 
         // Call the callback function.
         bool const hasDirect(coordProjection.direct.has_value());

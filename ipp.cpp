@@ -14,6 +14,7 @@
 #include <queue>
 #include <thread>
 #include <tuple>
+#include <unordered_set>
 
 namespace {
 
@@ -330,6 +331,81 @@ Ipp::cancel() {
     cancel_ = true;
 }
 
+namespace {
+
+struct ShortestPathMapKey {
+    std::string species;
+    Ipp::Coords coords;
+
+    ShortestPathMapKey() {}
+    ShortestPathMapKey(std::string const& species, Ipp::Coords const& coords)
+        : species(species)
+        , coords(coords)
+    {}
+
+    bool operator==(ShortestPathMapKey const& other) const {
+        return species == other.species && coords == other.coords;
+    }
+};
+
+struct ShortestPathMapEntry {
+    double score;
+    Ipp::Anchors anchors;
+    ShortestPathMapKey const* prevKey;
+    ShortestPathMapEntry const* prevEntry;
+
+    ShortestPathMapEntry()
+        : score(0) , prevKey(nullptr), prevEntry(nullptr)
+    {}
+    ShortestPathMapEntry(double score, 
+                         Ipp::Anchors const& anchors,
+                         ShortestPathMapKey const* prevKey,
+                         ShortestPathMapEntry const* prevEntry)
+        : score(score)
+        , anchors(anchors)
+        , prevKey(prevKey)
+        , prevEntry(prevEntry)
+    {}
+};
+
+struct OrangeEntry {
+    double score;
+    int pathLength;
+    ShortestPathMapKey const* spKey;
+
+    OrangeEntry(double score,
+                int pathLength,
+                ShortestPathMapKey const* spKey)
+        : score(score)
+        , pathLength(pathLength)
+        , spKey(spKey)
+    {}
+
+    bool operator<(OrangeEntry const& other) const {
+        // Use negative path length as shorter paths are better than longer
+        // ones.
+        return std::forward_as_tuple(score, -pathLength)
+            < std::forward_as_tuple(other.score, -other.pathLength);
+    }
+};
+
+} // namespace
+
+template<>
+struct std::hash<Ipp::Coords> {
+    std::size_t operator()(Ipp::Coords const& coords) const noexcept {
+        return std::hash<decltype(coords.chrom)>{}(coords.chrom)
+            ^ (std::hash<decltype(coords.loc)>{}(coords.loc) << 1);
+    }
+};
+template<>
+struct std::hash<ShortestPathMapKey> {
+    std::size_t operator()(ShortestPathMapKey const& spk) const noexcept {
+        return std::hash<decltype(spk.species)>{}(spk.species)
+            ^ (std::hash<decltype(spk.coords)>{}(spk.coords) << 1);
+    }
+};
+
 Ipp::CoordProjection
 Ipp::projectCoord(std::string const& refSpecies,
                   std::string const& qrySpecies,
@@ -345,94 +421,124 @@ Ipp::projectCoord(std::string const& refSpecies,
     double const scalingFactor(getScalingFactor(genomeSizes_.at(refSpecies)));
 
     CoordProjection coordProjection;
-    ShortestPath& shortestPath(coordProjection.multiShortestPath);
-    shortestPath[refSpecies] = { 1.0, "", refCoords, {} };
+    std::unordered_map<ShortestPathMapKey, ShortestPathMapEntry> shortestPath;
 
-    struct OrangeEntry {
-        double score;
-        std::string species;
-        Ipp::Coords coords;
+    ShortestPathMapKey const* const refSpKey(
+        &shortestPath.try_emplace(ShortestPathMapKey(refSpecies, refCoords),
+                                  1.0, Ipp::Anchors(), nullptr, nullptr)
+        .first->first);
 
-        OrangeEntry(double score,
-                    std::string const& species,
-                    Ipp::Coords const& coords)
-            : score(score), species(species), coords(coords)
-        {}
+    std::priority_queue<OrangeEntry> orange; // greatest first.
+    orange.emplace(1.0, 0, refSpKey);
 
-        bool operator<(OrangeEntry const& other) const {
-            return std::tie(score, species, coords)
-                < std::tie(other.score, other.species, other.coords);
-        }
-    };
-    std::priority_queue<OrangeEntry> orange;
-    orange.emplace(1.0, refSpecies, refCoords);
-
+    ShortestPathMapKey const* bestQrySpKey(nullptr);
     while (!orange.empty()) {
         OrangeEntry const current(orange.top());
         orange.pop();
 
-        auto it(shortestPath.find(current.species));
+        auto const it(shortestPath.find(*current.spKey));
         if (it != shortestPath.end() && it->second.score > current.score) {
             continue;
-            // The current species was already reached by a faster path, ignore
-            // this path and go to the next species.
+            // The current <species,coord> was already reached by a faster path,
+            // ignore this path and go to the next species.
         }
 
+        std::string const& currentSpecies(current.spKey->species);
+        Coords const& currentCoords(current.spKey->coords);
         if (debug) {
-            std::cout << "- " << current.species << " " << current.score << " "
-                      << current.coords.chrom << ":" << current.coords.loc
+            std::cout << "- " << currentSpecies << " " << current.score << " "
+                      << currentCoords.chrom << ":" << currentCoords.loc
                       << std::endl;
         }
         
-        if (current.species == qrySpecies) {
+        if (currentSpecies == qrySpecies) {
+            bestQrySpKey = current.spKey;
             break;
             // qry species reached, stop.
         }
 
-        for (auto const& nxt : pwalns_.at(current.species)) {
+        // Collect all the species that are traversed on the current path and
+        // avoid visiting them again.
+        std::unordered_set<std::string> speciesOnPath;
+        ShortestPathMapKey const* currentSpKey(current.spKey);
+        ShortestPathMapEntry const* currentSpEntry(&it->second);
+        while (currentSpKey) {
+            speciesOnPath.insert(currentSpKey->species);
+            currentSpKey = currentSpEntry->prevKey;
+            currentSpEntry = currentSpEntry->prevEntry;
+        }
+
+        for (auto const& nxt : pwalns_.at(currentSpecies)) {
             std::string const& nxtSpecies(nxt.first);
-            it = shortestPath.find(nxtSpecies);
-            if (it != shortestPath.end()
-                && current.score <= it->second.score) {
+
+            // Don't visit a species twice on the same path.
+            if (speciesOnPath.find(nxtSpecies) != speciesOnPath.end()) {
                 continue;
-                // If the score to the current species is lower than any
-                // previous path to nxtSpecies, then nxtSpecies won't be reached
-                // faster through the current species.
             }
 
             if (debug) {
                 std::cout << "--> " << nxtSpecies << std::endl;
             }
 
-            auto const proj(projectGenomicLocation(current.species,
-                                                   nxtSpecies,
-                                                   current.coords,
-                                                   scalingFactor));
+            std::optional<GenomicProjectionResult> const proj(
+                projectGenomicLocation(currentSpecies,
+                                       nxtSpecies,
+                                       currentCoords,
+                                       scalingFactor));
             if (!proj) {
                 continue;
                 // No path was found.
             }
 
-            if(current.species == refSpecies && nxtSpecies == qrySpecies) {
+            if(currentSpecies == refSpecies && nxtSpecies == qrySpecies) {
                 // Direct projection.
                 coordProjection.direct = *proj;
             }
 
             double const nxtScore(current.score * proj->score);
-            if (it != shortestPath.end() && nxtScore <= it->second.score) {
-                continue;
-                // Only save the current path to nxtSpecies if it is faster than
-                // any previous path to it.
-            }
+            const auto [it2, success] = shortestPath.try_emplace(
+                {nxtSpecies, proj->nextCoords},
+                nxtScore, proj->anchors, current.spKey, &it->second);
+            if (success || it2->second.score < nxtScore) {
+                if (!success) {
+                    // There was already an entry in shortestPath but it had a
+                    // worse score -> replace.
+                    it2->second.score = nxtScore;
+                    it2->second.anchors = proj->anchors;
+                    it2->second.prevKey = current.spKey;
+                    it2->second.prevEntry = &it->second;
+                }
 
-            shortestPath[nxtSpecies] = {
-                nxtScore,
-                current.species,
-                proj->nextCoords,
-                proj->anchors
-            };
-            orange.emplace(nxtScore, nxtSpecies, proj->nextCoords);
+                // Only increase the path length if we don't reach the query
+                // species as the next hop. This ensures that for the same
+                // score we prefer the path that reaches the qry species first.
+                int const nxtPathLength(nxtSpecies != qrySpecies
+                                        ? current.pathLength + 1
+                                        : current.pathLength);
+                orange.emplace(nxtScore, nxtPathLength, &it2->first);
+            }
         }
+    }
+
+    if (bestQrySpKey) {
+        // Backtrace the shortest path from the reference to the given target
+        // species (in reversed order).
+        ShortestPathMapKey const* currentSpKey(bestQrySpKey);
+        ShortestPathMapEntry const* currentSpEntry(
+            &shortestPath.at(*currentSpKey));
+        while (currentSpKey) {
+            coordProjection.multiShortestPath.emplace_back(
+                currentSpKey->species,
+                currentSpKey->coords,
+                currentSpEntry->score,
+                currentSpEntry->anchors);
+            currentSpKey = currentSpEntry->prevKey;
+            currentSpEntry = currentSpEntry->prevEntry;
+        }
+
+        // Reverse the shortest path list to have it in the right order.
+        std::reverse(coordProjection.multiShortestPath.begin(),
+                     coordProjection.multiShortestPath.end());
     }
 
     return coordProjection;

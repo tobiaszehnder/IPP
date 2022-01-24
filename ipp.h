@@ -109,6 +109,10 @@ public:
         bool operator<(Coords const& other) const {
             return std::tie(chrom, loc) < std::tie(other.chrom, other.loc);
         }
+        bool operator==(Coords const& other) const {
+            return chrom == other.chrom
+                && loc == other.loc;
+        }
     };
 
     struct Anchors {
@@ -123,25 +127,22 @@ public:
     };
 
     struct ShortestPathEntry {
-        double score;
-        std::string prevSpecies;
+        std::string species;
         Coords coords;
+        double score;
         Anchors anchors;
 
-        ShortestPathEntry()
-            : score(0)
-        {}
-        ShortestPathEntry(double score, 
-                          std::string const& prevSpecies,
+        ShortestPathEntry(std::string const& species,
                           Coords const& coords,
+                          double score,
                           Anchors const& anchors)
-            : score(score)
-            , prevSpecies(prevSpecies)
+            : species(species)
             , coords(coords)
+            , score(score)
             , anchors(anchors)
         {}
     };
-    using ShortestPath = std::unordered_map<std::string, ShortestPathEntry>;
+    using ShortestPath = std::vector<ShortestPathEntry>;
 
     struct GenomicProjectionResult {
         double score;
