@@ -240,7 +240,7 @@ def main():
             .drop(columns=['sort_idx']) \
             .set_index('id')
     # exclude anchor columns if flag to keep them was not set
-    if not args.include_anchors_in_results:
+    if not args.include_anchors:
         columns=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi', 'bridging_species']
         results_df = results_df.loc[:, columns]
