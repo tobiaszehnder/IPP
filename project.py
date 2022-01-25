@@ -8,8 +8,8 @@ import pandas as pd
 import tabulate
 import tqdm
 import pyranges as pr
-from functions import *
 import sys
+from functions import *
 
 LOG_LEVEL_QUIET = 0
 LOG_LEVEL_LOG = 1
@@ -101,14 +101,15 @@ def main():
     parser.add_argument('ref', help='reference species')
     parser.add_argument('qry', help='query species')
     parser.add_argument('path_pwaln')
-    parser.add_argument('--out_dir', default=os.getcwd(), help='directory for output files')
-    parser.add_argument('--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
-    parser.add_argument('--n_cores', type=int, default=1, help='number of CPUs')
-    parser.add_argument('--quiet', action="store_true", help='do not produce any log output')
+    parser.add_argument('-o', '--out_dir', default=os.getcwd(), help='directory for output files')
+    parser.add_argument('-n', '--n_cores', type=int, default=1, help='number of CPUs')
+    parser.add_argument('-t', '--target_regions', help='functional regions in target species to check for overlap with projections for classification')
+    parser.add_argument('-d', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
+    parser.add_argument('-q', '--quiet', action="store_true", help='do not produce any log output')
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
     parser.add_argument('-s', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
-    parser.add_argument('--data_dir', default='/project/ipp-data')
-    parser.add_argument('-a', '--include_anchors_in_results', action='store_true', help='include anchors in results table')
+    parser.add_argument('-a', '--assembly_dir', default='/project/ipp-data/assembly')
+    parser.add_argument('-i', '--include_anchors', action='store_true', help='include anchors in results table')
     args = parser.parse_args()
 
     global log_level
@@ -118,7 +119,6 @@ def main():
         log_level = LOG_LEVEL_DEBUG
 
     # define variables and create output directory
-    assembly_dir = args.data_dir + '/assembly/'
     if not os.path.exists(args.out_dir):
         os.mkdir(args.out_dir)
 
@@ -126,7 +126,7 @@ def main():
     log("Loading pairwise alignments")
     myIpp = ipp.Ipp()
     myIpp.load_pwalns(args.path_pwaln)
-    myIpp.load_genome_sizes(assembly_dir);
+    myIpp.load_genome_sizes(args.assembly_dir);
     myIpp.set_half_life_distance(args.half_life_distance)
 
     #input('Press enter to start')
