@@ -15,14 +15,22 @@ The optimal choice and combination of bridging species may vary from one genomic
 ## USAGE ##
 -----------
 
-download_ipp_data:
-	IPP uses a collection of pairwise alignments between the reference, target, and all bridging species stored in binary format.
-	These are large files stored separately from github and can be downloaded using this script.
+BUILD THE MODULE:
+	python setup.py build
+	# Run the following command in the folder where you cloned the github repository:
 
-compute_alignments:
-	Use the scripts in this folder to compute pairwise alignments for your own set of species.
-	A Snakefile guides through the whole alignment process from fasta to chain file and creates the final collection of pairwise alignments between reference, target and all bridging species.
+DOWNLOAD ALIGNMENT DATA:
+	download_ipp_data
+	# IPP uses a collection of pairwise alignments between the reference, target, and all bridging species stored in binary format.
+	# These are large files stored separately from github and can be downloaded using the following command:
+	
+COMPUTE ALIGNMENTS YOURSELF:
+	compute_alignments/compute_pairwise_alignments
+	# Compute pairwise alignments for your own set of species.
+	# A Snakefile guides through the whole alignment process from fasta to chain file.
+	# You can create the final collection of pairwise alignments between reference, target and a given set of bridging species.
 
-project.py:
-	Project the regions of a bed-file from one genome to another.
-	Type project.py -h for a detailed description.
+PROJECT REGIONS:
+	project.py
+	# Project the regions of a bed-file from one genome to another.
+	# Type project.py -h for a detailed description.
