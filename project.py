@@ -205,7 +205,6 @@ def main():
   
         multi_bridging_species = \
             ','.join([spe.species for spe in multi_shortest_path[1:-1]])
-
         results.append([
             coord_idx,
             coord_name, ref_coord, direct_coords, multi_coords,
@@ -215,8 +214,8 @@ def main():
             multi_first_entry.up_anchor.ref_start, multi_first_entry.up_anchor.ref_end,
             multi_first_entry.down_anchor.ref_start, multi_first_entry.down_anchor.ref_end,
             *direct_qrys,
-            multi_last_entry.up_anchor.ref_start, multi_last_entry.up_anchor.ref_end,
-            multi_last_entry.down_anchor.ref_start, multi_last_entry.down_anchor.ref_end])
+            multi_last_entry.up_anchor.qry_start, multi_last_entry.up_anchor.qry_end,
+            multi_last_entry.down_anchor.qry_start, multi_last_entry.down_anchor.qry_end])
   
     # Start the projection
     log('Projecting regions from %s to %s' %(args.ref, args.qry))
