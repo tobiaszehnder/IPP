@@ -9,7 +9,6 @@ import tabulate
 import tqdm
 import pyranges as pr
 import sys
-from functions import *
 
 LOG_LEVEL_QUIET = 0
 LOG_LEVEL_LOG = 1
@@ -248,18 +247,21 @@ def main():
     if is_debug():
         debug(results_df.to_string())
 
-    # write results table to file
-    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
-    outfile_table = os.path.join(args.out_dir, regions_file_basename) + '.proj'
-    log('Writing projections table to:\n\t%s' %outfile_table)
-    results_df.to_csv(outfile_table, sep='\t', header=True, float_format='%.3f')
-
+        
     # write list of coord names of unmapped regions to file
+    regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
     outfile_unmapped = os.path.join(args.out_dir, regions_file_basename) + '.unmapped'
     log('Writing unmapped regions to:\n\t%s' %outfile_unmapped)
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
 
+    # write results table to file
+    outfile_table = os.path.join(args.out_dir, regions_file_basename) + '.proj'
+    if results_df.shape[0] == 0:
+        log('No regions from the input bed files could be projected\nDone')
+        return
+    log('Writing table with successful projections to:\n\t%s' %outfile_table)
+    results_df.to_csv(outfile_table, sep='\t', header=True, float_format='%.3f')
 
     def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh=.95, maxgap=500):
         ### function for determining the conservation of sequence (DC/IC/NC) and function (+/-)  
@@ -322,6 +324,7 @@ def main():
     bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
 
     log('Done')
+    return
     
 if __name__ == '__main__':
     main()
