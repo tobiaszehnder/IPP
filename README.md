@@ -17,15 +17,19 @@ The optimal choice and combination of bridging species may vary from one genomic
 1. Download or clone the repository from github and go to the diretory.
 2. Compile the module: `python setup.py build`
 3. Tell python where to look for your module.
-   Use the directory that is created according to your python version.
-   `export PYTHONPATH=build/lib.linux-x86_64-3.10/`
-
+   Use the directory that is created according to your python version, e.g.:
+   `export PYTHONPATH=/path/to/your/IPP_directory/build/lib.linux-x86_64-3.10/`
+   Check the last folder, it might be different than what is stated here.
+   Write the line to your ~/.bashrc or ~/.bash_profile if you want it to be set in every new shell session.
+4. Make sure the following python modules are installed:
+   `os, sys, numpy, pandas, argparse, tabulate, tqdm, pyranges`
 
 ## Alignment Data
 
 IPP uses a collection of pairwise alignments (pwaln) between the reference, target, and all bridging species stored in binary format.
 We provide a set of precomputed pwaln collection files for selected species comparisons.
-These are large files stored separately from github and can be downloaded <a href="https://oc-molgen.gnz.mpg.de/owncloud/s/ACWNtKRCiN8BYxi">HERE</a></p>.
+These are large files stored separately from github and can be downloaded <a href="https://oc-molgen.gnz.mpg.de/owncloud/s/ACWNtKRCiN8BYxi">HERE</a>.
+You can download individual files, but make sure you maintain the folder structure: `ipp_data/alignment/pwaln/reference.target.pwaln.bin`
 
 Alternatively, we provide a pipeline to compute your own alignment collections for your choice of species.
 For that, run `compute_alignments/compute_pairwise_alignments`
