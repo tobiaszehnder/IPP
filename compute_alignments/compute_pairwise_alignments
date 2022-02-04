@@ -30,7 +30,8 @@ qry=""
 data_dir="/project/ipp-data"
 force="none"
 nthreads="--cores 1"
-snakefile="/project/ipp/bin/compute_pwalns/Snakefile"
+script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # directory of this script
+snakefile="$script_dir/Snakefile"
 snakemake_args="-pr --rerun-incomplete"
 while getopts ":s:t:cr:q:d:f:@:!:n" OPTION; do
  	case $OPTION in

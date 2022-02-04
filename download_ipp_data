@@ -1,6 +1,0 @@
-#! /bin/bash
-
-### Script for downloading big files from bitbucket, e.g. precomputed collections of pairwise alignments for particular species comparisons
-curl -C - -o ipp_data.zip -L --user tobiaszehnder:jLqBHY5y5sCgJRrvpZB9 https://bitbucket.org/tobiaszehnder/ipp_data/get/4a45b85f3a9b.zip
-unzip -d . ipp_data.zip
-echo "renaming data folder to ipp_data/" && mv ../tobiaszehnder-ipp_data-4a45b85f3a9b ipp_data

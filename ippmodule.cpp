@@ -108,24 +108,6 @@ ippLoadPwalns(PyIpp* self, PyObject* args) {
 }
 
 static PyObject*
-ippLoadGenomeSizes(PyIpp* self, PyObject* args) {
-    // Reads the genome sizes from the files in the given directory.
-    char const* dirName;
-    if (!PyArg_ParseTuple(args,"s", &dirName)) {
-        return nullptr;
-    }
-
-    try {
-        self->ipp.loadGenomeSizes(dirName);
-    } catch (std::exception const& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return nullptr;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject*
 ippSetHalfLifeDistance(PyIpp* self, PyObject* args) {
     // Sets the half-life distance.
     unsigned halfLifeDistance;
@@ -160,6 +142,66 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
         return nullptr;
     }
 
+    auto const callPyCallback = [&](std::string const& refChromName,
+                                    uint32_t refChromLoc,
+                                    Ipp::CoordProjection const& coordProjection) {
+        // Call the given callback from the python script.
+        auto const createPyAnchor = [](Ipp::PwalnEntry const& anchor) {
+            PyObject* const pyAnchor(PyStructSequence_New(PyIppAnchor_Type));
+            PyStructSequence_SetItem(pyAnchor, 0, PyLong_FromSize_t(anchor.refStart()));
+            PyStructSequence_SetItem(pyAnchor, 1, PyLong_FromSize_t(anchor.refEnd()));
+            PyStructSequence_SetItem(pyAnchor, 2, PyLong_FromSize_t(anchor.qryStart()));
+            PyStructSequence_SetItem(pyAnchor, 3, PyLong_FromSize_t(anchor.qryEnd()));
+            return pyAnchor;
+        };
+        auto const createPyCoords = [](std::string const& chromName,
+                                       uint32_t loc) {
+            PyObject* const pyCoords(PyStructSequence_New(PyIppCoords_Type));
+            PyStructSequence_SetItem(pyCoords, 0, PyUnicode_FromString(chromName.c_str()));
+            PyStructSequence_SetItem(pyCoords, 1, PyLong_FromSize_t(loc));
+            return pyCoords;
+        };
+        auto const createPyCoords2 = [&](Ipp::Coords const& coords) {
+            std::string const& chromName(self->ipp.chromName(coords.chrom));
+            return createPyCoords(chromName, coords.loc);
+        };
+
+        // Translate the shortest path to a python list.
+        PyObject* const multiShortestPath(
+            PyList_New(coordProjection.multiShortestPath.size()));
+        for (unsigned i(0); i < coordProjection.multiShortestPath.size(); ++i) {
+            Ipp::ShortestPathEntry const& spe(
+                coordProjection.multiShortestPath[i]);
+            PyObject* const pySpe(PyStructSequence_New(PyIppShortestPathEntry_Type));
+            PyStructSequence_SetItem(pySpe, 0, PyUnicode_FromString(spe.species.c_str()));
+            PyStructSequence_SetItem(pySpe, 1, PyFloat_FromDouble(spe.score));
+            PyStructSequence_SetItem(pySpe, 2, createPyCoords2(spe.coords));
+            PyStructSequence_SetItem(pySpe, 3, createPyAnchor(spe.anchors.upstream));
+            PyStructSequence_SetItem(pySpe, 4, createPyAnchor(spe.anchors.downstream));
+            PyList_SetItem(multiShortestPath, i, pySpe);
+        }
+
+        // Call the callback function.
+        bool const hasDirect(coordProjection.direct.has_value());
+        PyObject* const argList(Py_BuildValue(
+                "OdOOOO",
+                createPyCoords(refChromName, refChromLoc),
+                hasDirect ? coordProjection.direct->score : 0.0d,
+                hasDirect ? createPyCoords2(coordProjection.direct->nextCoords) : Py_None,
+                hasDirect ? createPyAnchor(coordProjection.direct->anchors.upstream) : Py_None,
+                hasDirect ? createPyAnchor(coordProjection.direct->anchors.downstream) : Py_None,
+                multiShortestPath));
+        PyObject* const result(PyObject_CallObject(callback, argList));
+        Py_DECREF(argList);
+        Py_DECREF(multiShortestPath);
+
+        if (!result) {
+            // An error occured.
+            throw std::runtime_error("Error in the callback function");
+        }
+        Py_DECREF(result);
+    };
+
     // Parse the ref coords from the given list of tuples.
     std::vector<Ipp::Coords> refCoords;
     refCoords.reserve(PyList_Size(pyRefCoords));
@@ -175,63 +217,23 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
             return nullptr;
         }
 
-        refCoords.emplace_back(self->ipp.chromIdFromName(refCoordsChromName),
-                               refCoordsLoc);
+        std::optional<Ipp::ChromId> const refChromId(
+            self->ipp.chromIdFromName(refCoordsChromName));
+        if (!refChromId) {
+            // No alignment for this chromosome.
+            callPyCallback(refCoordsChromName,
+                           refCoordsLoc,
+                           Ipp::CoordProjection());
+        } else {
+            refCoords.emplace_back(*refChromId, refCoordsLoc);
+        }
     }
 
     auto const onJobDone = [&](Ipp::Coords const& refCoord,
                                Ipp::CoordProjection const& coordProjection) {
-        // Call the given callback from the python script.
-        auto const createPyAnchor = [](Ipp::PwalnEntry const& anchor) {
-            PyObject* const pyAnchor(PyStructSequence_New(PyIppAnchor_Type));
-            PyStructSequence_SetItem(pyAnchor, 0, PyLong_FromSize_t(anchor.refStart()));
-            PyStructSequence_SetItem(pyAnchor, 1, PyLong_FromSize_t(anchor.refEnd()));
-            PyStructSequence_SetItem(pyAnchor, 2, PyLong_FromSize_t(anchor.qryStart()));
-            PyStructSequence_SetItem(pyAnchor, 3, PyLong_FromSize_t(anchor.qryEnd()));
-            return pyAnchor;
-        };
-        auto const createPyCoords = [self](Ipp::Coords const& coords) {
-            PyObject* const pyCoords(PyStructSequence_New(PyIppCoords_Type));
-            std::string const chromName(self->ipp.chromName(coords.chrom));
-            PyStructSequence_SetItem(pyCoords, 0, PyUnicode_FromString(chromName.c_str()));
-            PyStructSequence_SetItem(pyCoords, 1, PyLong_FromSize_t(coords.loc));
-            return pyCoords;
-        };
-
-        // Translate the shortest path to a python list.
-        PyObject* const multiShortestPath(
-            PyList_New(coordProjection.multiShortestPath.size()));
-        for (unsigned i(0); i < coordProjection.multiShortestPath.size(); ++i) {
-            Ipp::ShortestPathEntry const& spe(
-                coordProjection.multiShortestPath[i]);
-            PyObject* const pySpe(PyStructSequence_New(PyIppShortestPathEntry_Type));
-            PyStructSequence_SetItem(pySpe, 0, PyUnicode_FromString(spe.species.c_str()));
-            PyStructSequence_SetItem(pySpe, 1, PyFloat_FromDouble(spe.score));
-            PyStructSequence_SetItem(pySpe, 2, createPyCoords(spe.coords));
-            PyStructSequence_SetItem(pySpe, 3, createPyAnchor(spe.anchors.upstream));
-            PyStructSequence_SetItem(pySpe, 4, createPyAnchor(spe.anchors.downstream));
-            PyList_SetItem(multiShortestPath, i, pySpe);
-        }
-
-        // Call the callback function.
-        bool const hasDirect(coordProjection.direct.has_value());
-        PyObject* const argList(Py_BuildValue(
-                "OdOOOO",
-                createPyCoords(refCoord),
-                hasDirect ? coordProjection.direct->score : 0.0d,
-                hasDirect ? createPyCoords(coordProjection.direct->nextCoords) : Py_None,
-                hasDirect ? createPyAnchor(coordProjection.direct->anchors.upstream) : Py_None,
-                hasDirect ? createPyAnchor(coordProjection.direct->anchors.downstream) : Py_None,
-                multiShortestPath));
-        PyObject* const result(PyObject_CallObject(callback, argList));
-        Py_DECREF(argList);
-        Py_DECREF(multiShortestPath);
-
-        if (!result) {
-            // An error occured.
-            throw std::runtime_error("Error in the callback function");
-        }
-        Py_DECREF(result);
+        callPyCallback(self->ipp.chromName(refCoord.chrom),
+                       refCoord.loc,
+                       coordProjection);
     };
 
     // Listen for Ctrl-C signals.
@@ -264,7 +266,6 @@ ippCancel(PyIpp* self, PyObject* args) {
 
 static PyMethodDef ippMethods[] = {
     {"load_pwalns", (PyCFunction)ippLoadPwalns, METH_VARARGS, "Reads the chromosomes and pwalns from the given file"},
-    {"load_genome_sizes", (PyCFunction)ippLoadGenomeSizes, METH_VARARGS, "Reads the genome sizes from the files in the given directory"},
     {"set_half_life_distance", (PyCFunction)ippSetHalfLifeDistance, METH_VARARGS, "Sets the half-life distance"},
     {"project_coords", (PyCFunction)ippProjectCoords, METH_VARARGS, ""},
     {"cancel", (PyCFunction)ippCancel, METH_VARARGS, "Cancel ongoing project_coords() call"},

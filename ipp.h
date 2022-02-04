@@ -84,13 +84,10 @@ public:
     void loadPwalns(std::string const& fileName);
     // Reads the chromosomes and pwalns from the given file.
 
-    void loadGenomeSizes(std::string const& dirName);
-    // Reads the genome sizes from the files in the given directory.
-
     void setHalfLifeDistance(unsigned halfLifeDistance);
     // Sets the half-life distance.
 
-    ChromId chromIdFromName(std::string const& chromName) const;
+    std::optional<ChromId> chromIdFromName(std::string const& chromName) const;
     // Looks up the given chromosome name in chroms_ and returns its id.
 
     std::string const& chromName(ChromId chromId) const;
@@ -191,32 +188,31 @@ private:
         std::string const& refSpecies,
         std::string const& qrySpecies,
         Coords const& refCoords,
-        double scalingFactor) const;
+        uint64_t genomeSizeRef) const;
 
     std::optional<Anchors> getAnchors(Pwaln const& pwaln,
                                       std::string const& refSpecies,
                                       Coords const& refCoords,
                                       std::string const& qrySpecies) const;
 
-    static std::vector<PwalnEntry> longestSubsequence(
-        std::vector<PwalnEntry> const& seq);
+    static std::vector<PwalnEntry const*> longestSubsequence(
+        std::vector<PwalnEntry const*> const& seq);
     // Searches the longest strictly increasing or decreasing subsequence of seq
     // and puts it in res.
     // O(n log k) algorithm.
 
-    double getScalingFactor(unsigned genomeSize) const;
-
     double projectionScore(uint32_t loc,
                            uint32_t upBound,
                            uint32_t downBound,
-                           unsigned genomeSize,
-                           double scalingFactor) const;
+                           uint64_t genomeSize,
+                           uint64_t genomeSizeRef) const;
 
 private:
     std::vector<std::string> chroms_;
     Pwalns pwalns_;
-    std::unordered_map<std::string, unsigned> genomeSizes_;
+    std::unordered_map<std::string, uint64_t> genomeSizes_;
     unsigned halfLifeDistance_;
+    uint16_t maxAnchorLength_;
     volatile bool cancel_;
 };
 

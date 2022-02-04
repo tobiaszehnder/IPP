@@ -102,15 +102,21 @@ def main():
     parser.add_argument('path_pwaln')
     parser.add_argument('-o', '--out_dir', default=os.getcwd(), help='directory for output files')
     parser.add_argument('-n', '--n_cores', type=int, default=1, help='number of CPUs')
-    parser.add_argument('-t', '--target_regions', help='functional regions in target species to check for overlap with projections for classification')
+    parser.add_argument('-t', '--target_bedfile', default=None, help='functional regions in target species to check for overlap with projections for classification')
     parser.add_argument('-d', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
     parser.add_argument('-q', '--quiet', action="store_true", help='do not produce any log output')
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
     parser.add_argument('-s', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
-    parser.add_argument('-a', '--assembly_dir', default='/project/ipp-data/assembly')
     parser.add_argument('-i', '--include_anchors', action='store_true', help='include anchors in results table')
     args = parser.parse_args()
 
+    # check if files exist
+    with open(args.regions_file):
+        pass
+    if args.target_bedfile is not None:
+        with open(args.target_bedfile):
+            pass
+    
     global log_level
     if args.quiet:
         log_level = LOG_LEVEL_QUIET
@@ -125,7 +131,6 @@ def main():
     log("Loading pairwise alignments")
     myIpp = ipp.Ipp()
     myIpp.load_pwalns(args.path_pwaln)
-    myIpp.load_genome_sizes(args.assembly_dir);
     myIpp.set_half_life_distance(args.half_life_distance)
 
     #input('Press enter to start')
@@ -238,16 +243,20 @@ def main():
             .sort_values(by=['sort_idx']) \
             .drop(columns=['sort_idx']) \
             .set_index('id')
+
     # exclude anchor columns if flag to keep them was not set
     if not args.include_anchors:
         columns=['coords_ref', 'coords_direct', 'coords_multi',
                  'score_direct', 'score_multi', 'bridging_species']
         results_df = results_df.loc[:, columns]
 
+    # Trim scores to third decimal (floor) such that 0.9999 becomes 0.999 instead of 1.000
+    # A score of 1.0 is reserved for regions overlapping alignments throughout the path
+    results_df[['score_direct','score_multi']] = results_df[['score_direct','score_multi']].apply(lambda x: np.floor(x*1000)/1000)
+        
     if is_debug():
         debug(results_df.to_string())
 
-        
     # write list of coord names of unmapped regions to file
     regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
     outfile_unmapped = os.path.join(args.out_dir, regions_file_basename) + '.unmapped'
@@ -255,20 +264,13 @@ def main():
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
 
-    # write results table to file
-    outfile_table = os.path.join(args.out_dir, regions_file_basename) + '.proj'
-    if results_df.shape[0] == 0:
-        log('No regions from the input bed files could be projected\nDone')
-        return
-    log('Writing table with successful projections to:\n\t%s' %outfile_table)
-    results_df.to_csv(outfile_table, sep='\t', header=True, float_format='%.3f')
-
     def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh=.95, maxgap=500):
         ### function for determining the conservation of sequence (DC/IC/NC) and function (+/-)  
         # determine sequence conservation
-        sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] == 1 else 'IC' if x['score_multi'] >= thresh else 'NC', axis=1).values
+        sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] == 1 else 'IC' if x['score_multi'] >= thresh else 'NC', axis=1)
         # create PyRanges object of projections
-        df_multi = pd.DataFrame({'Chromosome': [x.chrom for x in df_projections['coords_multi']],
+        df_multi = pd.DataFrame({'Name':df_projections.index,
+                                 'Chromosome': [x.chrom for x in df_projections['coords_multi']],
                                  'Start': [x.loc for x in df_projections['coords_multi']]})
         df_multi['End'] = df_multi['Start'] + 1
         pr_multi = pr.PyRanges(df_multi)  
@@ -279,21 +281,30 @@ def main():
             target_regions.Start -= maxgap
             target_regions.End += maxgap
             # save names of projected regions that overlap with a target region
-            names_FC = target_regions.overlap(pr_multi).Name.values
-            functional_conservation = ['+' if x in names_FC else '-' for x in df_projections.index]
-        # combine information of sequence and functional conservation
-        conservation = [s+f for s,f in zip(sequence_conservation,functional_conservation)]
-        return conservation
+            names_FC = pr_multi.overlap(target_regions).Name.values
+            functional_conservation = pd.Series('-', index=df_projections.index)
+            functional_conservation[names_FC] = '+'
+        return sequence_conservation, functional_conservation
         
     # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
     log('Classifying projections')
     thresh = .95
     maxgap = 500
     target_regions = None
-    if hasattr(args, 'target_bedfile'):
+    if args.target_bedfile is not None:
         target_regions = pr.read_bed(args.target_bedfile)
-    results_df['conservation'] = classify_conservation(results_df, target_regions, thresh, maxgap)
+    sequence_conservation, functional_conservation = classify_conservation(results_df, target_regions, thresh, maxgap)
+    results_df.insert(5, 'sequence_conservation', sequence_conservation)
+    results_df.insert(6, 'functional_conservation', functional_conservation)
 
+    # write results table to file
+    outfile_table = os.path.join(args.out_dir, regions_file_basename) + '.proj'
+    if results_df.shape[0] == 0:
+        log('No regions from the input bed files could be projected\nDone')
+        return
+    log('Writing table with successful projections to:\n\t%s' %outfile_table)
+    results_df.to_csv(outfile_table, sep='\t', header=True, float_format='%.3f')
+    
     def convert_df_to_bed(df, which):
         # function to convert the projections from data frame to bed format
         # which must be 'ref' or 'qry'
@@ -305,12 +316,12 @@ def main():
         bed = pd.DataFrame(df[coords_col].tolist(), index=df.index).rename(columns={0:'chrom', 1:'start'})
         bed['start'] = bed['start'].astype(int)
         bed['end'] = bed['start'] + 1
-        bed['name'] = df.apply(lambda x: '_'.join([x.name, str(x[opposite_coords_col]), x['conservation']]), axis=1)
+        bed['name'] = df.apply(lambda x: '_'.join([x.name, str(x[opposite_coords_col]), x['sequence_conservation']+x['functional_conservation']]), axis=1)
         bed['score'] = df['score_multi']
         bed['strand'] = '.'
         bed['thickStart'] = bed['start']
         bed['thickEnd'] = bed['end']
-        bed['itemRgb'] = df['conservation'].apply(lambda x: colors[x])
+        bed['itemRgb'] = (df['sequence_conservation'] + df['functional_conservation']).apply(lambda x: colors[x])
         return bed
     
     # write results to bed files (bed9 format for both reference and target species)

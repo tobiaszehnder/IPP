@@ -29,7 +29,6 @@ The optimal choice and combination of bridging species may vary from one genomic
 IPP uses a collection of pairwise alignments (pwaln) between the reference, target, and all bridging species stored in binary format.
 We provide a set of precomputed pwaln collection files for selected species comparisons.
 These are large files stored separately from github and can be downloaded <a href="https://oc-molgen.gnz.mpg.de/owncloud/s/ACWNtKRCiN8BYxi">HERE</a>.
-You can download individual files, but make sure you maintain the folder structure: `ipp_data/alignment/pwaln/reference.target.pwaln.bin`
 
 Alternatively, we provide a pipeline to compute your own alignment collections for your choice of species.
 For that, run `compute_alignments/compute_pairwise_alignments`
@@ -43,6 +42,6 @@ Project the regions of a bed-file from one genome to another:
 ```bash
 python project.py
 ```
-Type `project.py -h` for a detailed description.
+Type `python project.py -h` for a detailed description.
 
 Questions, suggestions and criticism are welcome at zehnder[at]molgen.mpg.de

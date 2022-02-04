@@ -48,13 +48,10 @@ Ipp::loadPwalns(std::string const& fileName) {
     //
     // version                   [uint8]
     // endianness_magic          [uint16]
-    // num_chomosomes            [uint32]
-    // {
-    //   chrom_name              [null-terminated string]
-    // } num_chromosomes times
     // num_sp1                   [uint8]
     // {
     //   sp1_name                [null-terminated string]
+    //   sp1_genome_size         [uint64]
     //   num_sp2                 [uint8]
     //   {
     //     sp2_name              [null-terminated string]
@@ -71,9 +68,15 @@ Ipp::loadPwalns(std::string const& fileName) {
     //     } num_ref_chrom_entries times
     //   } num_sp2 times
     // } num_sp1 times
-    uint8_t expectedFormatVersion(2);
+    // num_chomosomes            [uint32]
+    // {
+    //   chrom_name              [null-terminated string]
+    // } num_chromosomes times
+
+    uint8_t expectedFormatVersion(4);
 
     chroms_.clear();
+    genomeSizes_.clear();
     pwalns_.clear();
 
     std::ifstream file(fileName, std::ios::in|std::ios::binary);
@@ -96,18 +99,14 @@ Ipp::loadPwalns(std::string const& fileName) {
             "differs from the enndianess of this system");
     }
 
-    // Read the chromosomes.
-    auto const numChromosomes(readInt<uint32_t>(file));
-    chroms_.reserve(numChromosomes);
-    for (unsigned i(0); i < numChromosomes; ++i) {
-        chroms_.push_back(readString(file));
-    }
-
     // Read the pwalns.
+    maxAnchorLength_ = 0;
     auto const numSp1(readInt<uint8_t>(file));
     for (unsigned i(0); i < numSp1; ++i) {
         // Create new entry in the map if it is not yet there.
         std::string const sp1(readString(file));
+
+        genomeSizes_[sp1] = readInt<uint64_t>(file);
         auto& pwalnsSp1(pwalns_[sp1]);
 
         auto const numSp2(readInt<uint8_t>(file));
@@ -158,10 +157,19 @@ Ipp::loadPwalns(std::string const& fileName) {
                 std::vector<PwalnEntry>& pwalnEntries(pwaln[refChrom]);
                 pwalnEntries.reserve(numPwalnEntries);
                 for (unsigned l(0); l < numPwalnEntries; ++l) {
+                    maxAnchorLength_ = std::max(maxAnchorLength_,
+                                                buf[l].length());
                     pwalnEntries.emplace_back(buf[l]);
                 }
             }
         }
+    }
+
+	// Read the chromosomes.
+    auto const numChromosomes(readInt<uint32_t>(file));
+    chroms_.reserve(numChromosomes);
+    for (unsigned i(0); i < numChromosomes; ++i) {
+        chroms_.push_back(readString(file));
     }
 
     if (file.peek() != std::ifstream::traits_type::eof()) {
@@ -171,44 +179,19 @@ Ipp::loadPwalns(std::string const& fileName) {
 }
 
 void
-Ipp::loadGenomeSizes(std::string const& dirName) {
-    // Reads the genome sizes from the files in the given directory.
-    genomeSizes_.clear();
-
-    for (auto const& it : pwalns_) {
-        std::string const& species(it.first);
-        std::string const fileName(dirName + "/" + species + ".sizes");
-        std::ifstream file(fileName, std::ios::in);
-        if (!file.is_open()) {
-            throw std::runtime_error("could not open the file " + fileName);
-        }
-
-        unsigned genomeSize(0);
-        for (std::string line; std::getline(file, line); ) {
-            auto const spacePos(line.find('\t'));
-            if (spacePos == std::string::npos) {
-                throw std::runtime_error("line with no tabstop in " + fileName);
-            }
-            genomeSize += std::atoi(line.c_str()+spacePos);
-        }
-        genomeSizes_[species] = genomeSize;
-    }
-}
-
-void
 Ipp::setHalfLifeDistance(unsigned halfLifeDistance) {
     // Sets the half-life distance;
     halfLifeDistance_ = halfLifeDistance;
 }
 
-Ipp::ChromId
+std::optional<Ipp::ChromId>
 Ipp::chromIdFromName(std::string const& chromName) const {
     // Looks up the given chromosome name in chroms_ and returns its id.
     auto const it(std::find(chroms_.begin(), chroms_.end(), chromName));
     if (it == chroms_.end()) {
-        throw std::runtime_error("Unknown chromosome: " + chromName);
+        return {};
     }
-    return std::distance(chroms_.begin(), it);
+    return {std::distance(chroms_.begin(), it)};
 }
 
 std::string const&
@@ -218,20 +201,11 @@ Ipp::chromName(ChromId chromId) const {
 }
 
 double
-Ipp::getScalingFactor(unsigned genomeSizeRef) const {
-    // Returns the scaling factor that produces a score of 0.5 for
-    // halfLifeDistance_ in the reference species.
-    // This scaling factor will be used in all other species in the graph, but
-    // scaled to the according respective genome sizes.
-    return -1.0d * halfLifeDistance_ / (genomeSizeRef * std::log(0.5));
-}
-
-double
 Ipp::projectionScore(uint32_t loc,
                      uint32_t upBound,
                      uint32_t downBound,
-                     unsigned genomeSize,
-                     double scalingFactor) const {
+                     uint64_t genomeSize,
+                     uint64_t genomeSizeRef) const {
     // Anchors must be the locations of the up- and downstream anchors, not the
     // data frame with ref and qry coordinates.
     // The scaling factor determines how fast the function falls when moving
@@ -241,7 +215,9 @@ Ipp::projectionScore(uint32_t loc,
     // 100 kb at 10 kb).
     // score = 0.5^{minDist * genomeSizeRef / (genomeSize * halfLifeDistance_)}
     uint32_t const minDist(std::min(loc - upBound, downBound - loc));
-    double const score(std::exp(-1.0d * minDist / (genomeSize*scalingFactor)));
+    double const exp(((1.0d*minDist) / halfLifeDistance_)
+                     * ((1.0d*genomeSizeRef) / genomeSize));
+    double const score(std::pow(0.5d, exp));
     assert(0 <= score && score <= 1);
     return score;
 }
@@ -418,7 +394,7 @@ Ipp::projectCoord(std::string const& refSpecies,
                   << refCoords.chrom << ":" << refCoords.loc << std::endl;
     }
 
-    double const scalingFactor(getScalingFactor(genomeSizes_.at(refSpecies)));
+    uint64_t const genomeSizeRef(genomeSizes_.at(refSpecies));
 
     CoordProjection coordProjection;
     std::unordered_map<ShortestPathMapKey, ShortestPathMapEntry> shortestPath;
@@ -484,7 +460,7 @@ Ipp::projectCoord(std::string const& refSpecies,
                 projectGenomicLocation(currentSpecies,
                                        nxtSpecies,
                                        currentCoords,
-                                       scalingFactor));
+                                       genomeSizeRef));
             if (!proj) {
                 continue;
                 // No path was found.
@@ -550,8 +526,8 @@ template<typename T>
 void
 updateChromCount(std::unordered_map<Ipp::ChromId, unsigned>& chromCount,
                  T const& v) {
-    for (Ipp::PwalnEntry const& entry : v) {
-        ++chromCount[entry.qryChrom()];
+    for (Ipp::PwalnEntry const* entry : v) {
+        ++chromCount[entry->qryChrom()];
     }
 }
 
@@ -582,15 +558,19 @@ computeMajorChrom(Args const&... args) {
 }
 
 template<typename T>
-void
-removeEntriesWithNonMajorQryChromosome(T& anchors, Ipp::ChromId majorChrom) {
-    for (auto it(anchors.begin()); it != anchors.end(); ) {
-        if (it->qryChrom() != majorChrom) {
-            it = anchors.erase(it);
-        } else {
-            ++it;
+unsigned
+insertIfMajorQryChromosome(
+    T& anchors,
+    Ipp::ChromId majorChrom,
+    std::vector<Ipp::PwalnEntry const*>* closestAnchors) {
+    unsigned numInserted(0);
+    for (Ipp::PwalnEntry const* e : anchors) {
+        if (e->qryChrom() == majorChrom) {
+            closestAnchors->push_back(e);
+            ++numInserted;
         }
     }
+    return numInserted;
 }
 
 } // namespace
@@ -599,7 +579,7 @@ std::optional<Ipp::GenomicProjectionResult>
 Ipp::projectGenomicLocation(std::string const& refSpecies,
                             std::string const& qrySpecies,
                             Coords const& refCoords,
-                            double scalingFactor) const {
+                            uint64_t genomeSizeRef) const {
     auto const it1(pwalns_.find(refSpecies));
     if (it1 == pwalns_.end()) {
         // There is no pairwise alignment for the ref species.
@@ -665,7 +645,7 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                                 refUpBound,
                                 refDownBound,
                                 genomeSizes_.at(refSpecies),
-                                scalingFactor);
+                                genomeSizeRef);
 
         // +0.5 to bring the projection into the middle of the projected qry
         // region of potentially different size:
@@ -712,92 +692,154 @@ Ipp::getAnchors(Pwaln const& pwaln,
     unsigned const minn(5);
     unsigned const topn(20);
 
-    auto const compGreaterRefEnd = [](PwalnEntry const& lhs,
-                                      PwalnEntry const& rhs) {
-        return lhs.refEnd() > rhs.refEnd();
-    };
-
     uint32_t const refLoc(refCoords.loc);
 
-    // Find the topn entries by largest(smallest) refEnd(refStart) in the
-    // upstream(downstream) anchors.
-    std::set<PwalnEntry, decltype(compGreaterRefEnd)> anchorsUpstream(
-        compGreaterRefEnd);
-    std::vector<PwalnEntry> ovAln;
-    std::vector<PwalnEntry> anchorsDownstream;
     auto const pwalnEntriesIt(pwaln.find(refCoords.chrom));
     if (pwalnEntriesIt == pwaln.end()) {
         // No pwaln entry for this refCoords.chrom.
         return {};
     }
-    for (auto const& pwalnEntry : pwalnEntriesIt->second) {
+    std::vector<PwalnEntry> const& pwalnEntries(pwalnEntriesIt->second);
+
+    // Find the topn entries by largest(smallest) refEnd(refStart) in the
+    // upstream(downstream) anchors.
+
+    // Binary search for the closest upstream anchor (the first with
+    // refStart > refLoc).
+    auto const closestDownstreamAnchorIt(std::upper_bound(
+            pwalnEntries.begin(),
+            pwalnEntries.end(),
+            refLoc,
+            [](uint32_t loc, PwalnEntry const& e) {
+                return loc < e.refStart();
+            }));
+
+    // Find the downstream anchors.
+    std::vector<PwalnEntry const*> anchorsDownstream;
+    anchorsDownstream.reserve(topn);
+    for (auto it(closestDownstreamAnchorIt); it != pwalnEntries.end(); ++it) {
+        // downstream anchor
+        //    x     [ anchor ]
+        PwalnEntry const& pwalnEntry(*it);
+        assert(refLoc < pwalnEntry.refStart());
+        anchorsDownstream.push_back(&pwalnEntry);
+        if(anchorsDownstream.size() == topn) {
+            // We found the topn closest anchors with refStart > refLoc.
+            // Since the pwalnEntries are sorted by refStart, all the
+            // anchors to come are further away than what we have already
+            // seen.
+            break;
+        }
+    }
+
+    // Find the ovAln and upstream anchors. Walk backwards on the pwalnEntries
+    // starting from closestDownstreamAnchorIt and walk until
+    // e.refStart+maxAnchorLength_ < furthestUpstreamAnchor.refEnd.
+    // For this, keep a priority queue of the furthest upstream anchor.
+    auto const compGreaterRefEnd = [](PwalnEntry const* lhs,
+                                      PwalnEntry const* rhs) {
+        return std::forward_as_tuple(lhs->refEnd(),
+                                     lhs->refStart(),
+                                     lhs->qryStart(),
+                                     lhs->qryChrom())
+            > std::forward_as_tuple(rhs->refEnd(),
+                                    rhs->refStart(),
+                                    rhs->qryStart(),
+                                    rhs->qryChrom());
+    };
+    std::vector<PwalnEntry const*> anchorsUpstreamPqContainer;
+    anchorsUpstreamPqContainer.reserve(topn+1);
+    std::priority_queue<PwalnEntry const*,
+                        decltype(anchorsUpstreamPqContainer),
+                        decltype(compGreaterRefEnd)> anchorsUpstreamPq(
+            compGreaterRefEnd,
+            std::move(anchorsUpstreamPqContainer));
+    std::vector<PwalnEntry const*> ovAln;
+    for (auto it(closestDownstreamAnchorIt); it-- != pwalnEntries.begin();) {
+        // Walk upstream on the chromosome.
+        PwalnEntry const& pwalnEntry(*it);
         if (pwalnEntry.refEnd() < refLoc) { // refEnd is inclusive
             // upstream anchor
             // [ anchor ]    x
-            anchorsUpstream.insert(pwalnEntry);
-            if(anchorsUpstream.size() > 10*topn) {
-                // Remove surplus anchors that are too far away. We do that
-                // heuristically once we reach 10 times the maximum number to
-                // amortize the cost.
-                anchorsUpstream.erase(std::next(anchorsUpstream.begin(), topn),
-                                      anchorsUpstream.end());
+            if (anchorsUpstreamPq.size() == topn) {
+                if (pwalnEntry.refStart() + maxAnchorLength_
+                    < anchorsUpstreamPq.top()->refEnd()) {
+                    // This anchor is so far away from the currently furthest
+                    // upstream anchor that there is no further pwalnEntry2
+                    // (with pwalnEntry2.refStart < pwalnEntry.refStart) that
+                    // has pwalnEntry2.refEnd > pwalnEntry.refEnd.
+                    break;
+                }
+
+                if (pwalnEntry.refEnd() < anchorsUpstreamPq.top()->refEnd()) {
+                    // Prevent adding an entry that would immediately be removed
+                    // again.
+                    continue;
+                }
             }
-        } else if (refLoc < pwalnEntry.refStart()) {
-            // downstream anchor
-            //    x     [ anchor ]
-            anchorsDownstream.push_back(pwalnEntry);
-            if(anchorsDownstream.size() == topn) {
-                // We found the topn closest anchors with refStart > refLoc.
-                // Since the pwalnEntries are sorted by refStart, all the
-                // anchers to come are further away than what we have already
-                // seen.
-                break;
+
+            anchorsUpstreamPq.push(&pwalnEntry);
+            if (anchorsUpstreamPq.size() > topn) {
+                // Remove surplus anchors that are too far away.
+                anchorsUpstreamPq.pop();
             }
         } else {
             // refLoc lies on an alignment block.
             // [ anchor ]
             //      x
-            ovAln.push_back(pwalnEntry);
+            assert(pwalnEntry.refStart() <= refLoc
+                   && refLoc <= pwalnEntry.refEnd());
+            ovAln.push_back(&pwalnEntry);
         }
     }
+    assert(anchorsUpstreamPq.size() <= topn);
 
-    // Trim anchorsUpstream to only contain the topn closest entries.
-    if(anchorsUpstream.size() > topn) {
-        anchorsUpstream.erase(std::next(anchorsUpstream.begin(), topn),
-                              anchorsUpstream.end());
+    // Convert the anchorsUpstream priority queue into a vector.
+    std::vector<PwalnEntry const*> anchorsUpstream;
+    anchorsUpstream.reserve(anchorsUpstreamPq.size());
+    while (!anchorsUpstreamPq.empty()) {
+        anchorsUpstream.push_back(anchorsUpstreamPq.top());
+        anchorsUpstreamPq.pop();
     }
 
     // MAJOR CHROMOSOME: Retain anchors that point to the majority chromosome in
     // top n of both up- and downstream anchors.
     ChromId const majorChrom(
         computeMajorChrom(ovAln, anchorsUpstream, anchorsDownstream));
-    removeEntriesWithNonMajorQryChromosome(anchorsUpstream, majorChrom);
-    removeEntriesWithNonMajorQryChromosome(ovAln, majorChrom);
-    removeEntriesWithNonMajorQryChromosome(anchorsDownstream, majorChrom);
-  
-    if (!anchorsUpstream.size() || !anchorsDownstream.size()) {
+    std::vector<PwalnEntry const*> closestAnchors;
+    closestAnchors.reserve(
+        anchorsUpstream.size() + ovAln.size() + anchorsDownstream.size());
+    unsigned const numUpstream(insertIfMajorQryChromosome(anchorsUpstream,
+                                                          majorChrom,
+                                                          &closestAnchors));
+    insertIfMajorQryChromosome(ovAln, majorChrom, &closestAnchors);
+    unsigned const numDownstream(insertIfMajorQryChromosome(anchorsDownstream,
+                                                            majorChrom,
+                                                            &closestAnchors));
+    if (!numUpstream || !numDownstream) {
         // Require minimum of 1 anchor on each side. Later, the minimum total
         // number of collinear anchors will be set to `minn` (but one side is
         // allowed to have as little as 1 anchor).
         return {};
     }
 
-    // COLLINEARITY: Remove pwalns pointing to outliers by getting the longest
-    // sorted subsequence of the top n of both up- and downstream anchors.
-    std::vector<PwalnEntry> closestAnchors;
-    closestAnchors.insert(closestAnchors.begin(), anchorsUpstream.begin(), anchorsUpstream.end());
-    closestAnchors.insert(closestAnchors.end(), ovAln.begin(), ovAln.end());
-    closestAnchors.insert(closestAnchors.end(), anchorsDownstream.begin(), anchorsDownstream.end());
-
     // Sort the closestAnchors entries by increasing refStart. That is necessary
     // as the anchorsUpstream were previously sorted by decreasing refEnd.
-    auto const compLessRefStart = [](PwalnEntry const& lhs,
-                                     PwalnEntry const& rhs) {
-        return std::forward_as_tuple(lhs.refStart(), lhs.refEnd())
-            < std::forward_as_tuple(rhs.refStart(), rhs.refEnd());
+    auto const compLessRefStart = [](PwalnEntry const* lhs,
+                                     PwalnEntry const* rhs) {
+        return std::forward_as_tuple(lhs->refStart(),
+                                     lhs->refEnd(),
+                                     lhs->qryStart(),
+                                     lhs->qryChrom())
+            < std::forward_as_tuple(rhs->refStart(),
+                                    rhs->refEnd(),
+                                    rhs->qryStart(),
+                                    rhs->qryChrom());
     };
     std::sort(closestAnchors.begin(), closestAnchors.end(), compLessRefStart);
 
+    // COLLINEARITY: Remove pwalns pointing to outliers by getting the longest
+    // sorted subsequence of the top n of both up- and downstream anchors.
     // Compute longest collinear anchor subsequence (while considering both
     // normal and reversed direction).
     closestAnchors = longestSubsequence(closestAnchors);
@@ -815,16 +857,16 @@ Ipp::getAnchors(Pwaln const& pwaln,
     PwalnEntry const* closestUpstreamAnchor(nullptr);
     PwalnEntry const* closestOvAlnAnchor(nullptr);
     PwalnEntry const* closestDownstreamAnchor(nullptr);
-    for (auto const& anchor : closestAnchors) {
-        if (anchor.refEnd() < refLoc) {
+    for (PwalnEntry const* anchor : closestAnchors) {
+        if (anchor->refEnd() < refLoc) {
             if (!closestUpstreamAnchor
-                || closestUpstreamAnchor->refEnd() < anchor.refEnd()) {
-                closestUpstreamAnchor = &anchor;
+                || closestUpstreamAnchor->refEnd() < anchor->refEnd()) {
+                closestUpstreamAnchor = anchor;
             }
-        } else if (refLoc < anchor.refStart()) {
+        } else if (refLoc < anchor->refStart()) {
             if (!closestDownstreamAnchor
-                || anchor.refStart() < closestDownstreamAnchor->refStart()) {
-                closestDownstreamAnchor = &anchor;
+                || anchor->refStart() < closestDownstreamAnchor->refStart()) {
+                closestDownstreamAnchor = anchor;
 
                 // The anchors that follow this one will only be worse.
                 break;
@@ -840,20 +882,20 @@ Ipp::getAnchors(Pwaln const& pwaln,
                                     chroms_.at(refCoords.chrom).c_str(),
                                     refCoords.loc) << std::endl;
 
-                auto const printAnchor = [this](PwalnEntry const& anchor) {
-                    std::cerr << "    refStart: " << anchor.refStart() << std::endl;
-                    std::cerr << "    refEnd: " << anchor.refEnd() << std::endl;
-                    std::cerr << "    qryChrom: " << chroms_.at(anchor.qryChrom()) << std::endl;
-                    std::cerr << "    qryStart: " << anchor.qryStart() << std::endl;
-                    std::cerr << "    qryEnd: " << anchor.qryEnd() << std::endl;
+                auto const printAnchor = [this](PwalnEntry const* anchor) {
+                    std::cerr << "    refStart: " << anchor->refStart() << std::endl;
+                    std::cerr << "    refEnd: " << anchor->refEnd() << std::endl;
+                    std::cerr << "    qryChrom: " << chroms_.at(anchor->qryChrom()) << std::endl;
+                    std::cerr << "    qryStart: " << anchor->qryStart() << std::endl;
+                    std::cerr << "    qryEnd: " << anchor->qryEnd() << std::endl;
                 };
                 std::cerr << "  anchor 1" << std::endl;
-                printAnchor(*closestOvAlnAnchor);
+                printAnchor(closestOvAlnAnchor);
                 std::cerr << "  anchor 2" << std::endl;
                 printAnchor(anchor);
                 std::cerr << std::endl;
             }
-            closestOvAlnAnchor = &anchor;
+            closestOvAlnAnchor = anchor;
         }
     }
     if (closestOvAlnAnchor) {
@@ -873,11 +915,11 @@ Ipp::getAnchors(Pwaln const& pwaln,
 
 namespace {
 
-std::vector<Ipp::PwalnEntry>
-longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
-                   std::function<bool(Ipp::PwalnEntry const&)> const& filter,
-                   std::function<int(Ipp::PwalnEntry const&)> const& qryStart,
-                   std::function<int(Ipp::PwalnEntry const&)> const& qryEnd) {
+std::vector<Ipp::PwalnEntry const*>
+longestSubsequence(std::vector<Ipp::PwalnEntry const*> const& seq,
+                   std::function<bool(Ipp::PwalnEntry const*)> const& filter,
+                   std::function<int(Ipp::PwalnEntry const*)> const& qryStart,
+                   std::function<int(Ipp::PwalnEntry const*)> const& qryEnd) {
     // Finds the longest strictly increasing subsequence (in regards to the
     // given greater-than function). Only elements for which filter(seq[i])
     // returns true are considered.
@@ -944,7 +986,7 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
     }
 
     // Backtrace the longest subsequence into res.
-    std::vector<Ipp::PwalnEntry> res(m.size());
+    std::vector<Ipp::PwalnEntry const*> res(m.size());
     unsigned v(m.back());
     for (unsigned u(m.size()); u; --u) {
         res[u-1] = seq[v];
@@ -955,71 +997,45 @@ longestSubsequence(std::vector<Ipp::PwalnEntry> const& seq,
 
 } // namespace
 
-std::vector<Ipp::PwalnEntry>
-Ipp::longestSubsequence(std::vector<PwalnEntry> const& seq) {
-    bool const debug(false);
-
-    auto const printSeq = [](std::vector<PwalnEntry> const& seq) {
-        for (auto const& e : seq) {
-            std::cerr << e.qryStart() << ' ' << e.qryEnd() << ' '
-                      << (e.isQryReversed() ? "(-)" : "(+)") << std::endl;
-        }
-    };
-    if (debug) {
-        std::cerr << "seq: " << std::endl;
-        printSeq(seq);
-        std::cerr << std::endl;
-    }
-
-    std::vector<PwalnEntry> const inc(::longestSubsequence(
+std::vector<Ipp::PwalnEntry const*>
+Ipp::longestSubsequence(std::vector<PwalnEntry const*> const& seq) {
+    std::vector<PwalnEntry const*> const inc(::longestSubsequence(
             seq,
-            [](PwalnEntry const& e) {
-                return !e.isQryReversed();
+            [](PwalnEntry const* e) {
+                return !e->isQryReversed();
             },
-            [](PwalnEntry const& e) {
-                return e.qryStart();
+            [](PwalnEntry const* e) {
+                return e->qryStart();
             },
-            [](PwalnEntry const& e) {
-                return e.qryEnd();
+            [](PwalnEntry const* e) {
+                return e->qryEnd();
             }));
 
-    std::vector<PwalnEntry> const dec(::longestSubsequence(
+    std::vector<PwalnEntry const*> const dec(::longestSubsequence(
             seq,
-            [](PwalnEntry const& e) {
-                return e.isQryReversed();
+            [](PwalnEntry const* e) {
+                return e->isQryReversed();
             },
-            [](PwalnEntry const& e) {
-                return -1 * (int)e.qryStart();
+            [](PwalnEntry const* e) {
+                return -1 * (int)e->qryStart();
             },
-            [](PwalnEntry const& e) {
-                return -1 * (int)e.qryEnd();
+            [](PwalnEntry const* e) {
+                return -1 * (int)e->qryEnd();
             }));
-
-    if (debug) {
-        std::cerr << "inc: " << std::endl;
-        printSeq(inc);
-        std::cerr << std::endl;
-
-        std::cerr << "dec: " << std::endl;
-        printSeq(dec);
-        std::cerr << std::endl
-                  << "---------------------------" << std::endl
-                  << std::endl;
-    }
 
     // Sanity check: The entries in the inc/dec list should be strictly
     // increasing/decreasing.
     uint32_t loc(0);
-    for (auto const& e : inc) {
-        assert((!loc && !e.qryStart()) || loc < e.qryStart());
-        assert(e.qryStart() <= e.qryEnd());
-        loc = e.qryEnd();
+    for (PwalnEntry const* e : inc) {
+        assert((!loc && !e->qryStart()) || loc < e->qryStart());
+        assert(e->qryStart() <= e->qryEnd());
+        loc = e->qryEnd();
     }
     loc = std::numeric_limits<uint32_t>::max();
-    for (auto const& e : dec) {
-        assert(loc > e.qryEnd());
-        assert(e.qryStart() >= e.qryEnd());
-        loc = e.qryStart();
+    for (PwalnEntry const* e : dec) {
+        assert(loc > e->qryEnd());
+        assert(e->qryStart() >= e->qryEnd());
+        loc = e->qryStart();
     }
 
     return inc.size() >= dec.size() ? inc : dec;

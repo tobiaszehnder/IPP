@@ -10,18 +10,14 @@ assembly_dir = data_dir + '/assembly'
 alignment_dir = data_dir + '/alignment'
 fasta_dir = data_dir + '/fasta'
 lastdb_dir = alignment_dir + '/lastdb'
-axtnet_dir = alignment_dir + '/axtNet'
-axt_dir = alignment_dir + '/axt'
 chain_dir = alignment_dir + '/chain'
 maf_dir = alignment_dir + '/maf'
-net_dir = alignment_dir + '/net'
 psl_dir = alignment_dir + '/psl'
-tbl_dir = alignment_dir + '/chainTbl'
 bed_dir = alignment_dir + '/bed'
 pwaln_dir = alignment_dir + '/pwaln'
 
 # make directories
-for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, axtnet_dir, axt_dir, chain_dir, maf_dir, net_dir, psl_dir, tbl_dir, bed_dir, pwaln_dir]:
+for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, chain_dir, maf_dir, psl_dir, bed_dir, pwaln_dir]:
     if not os.path.exists(dr):
         os.makedirs(dr)
 
@@ -31,7 +27,7 @@ try:
     species_list = []
 except NameError:
     species_list=species_list.split(',')
-    targets = [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
+    targets = [chain_dir + '/%s.%s.all.pre.chain' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     if create_pwaln_collection:
         targets += ['{}/{}.{}.pwaln.bin'.format(pwaln_dir, ref, qry)]
 
@@ -43,22 +39,23 @@ rule all:
 
 rule collect_and_binarize_pwalns:
     input:
-        [tbl_dir + '/%s.%s.tbl' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
+        [chain_dir + '/%s.%s.all.pre.chain' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     output:
         '{pwaln_dir}/{species_pair}.pwaln.bin'
     params:
-        tbl_dir=tbl_dir,
+        chain_dir=chain_dir,
+        assembly_dir=assembly_dir,
         species_list=','.join(species_list)
     shell:
-        'collect_pwalns.py {params.tbl_dir} {params.species_list} {output}'
+        'collect_pwalns.py {params} {output}'
         
-rule chain_to_tbl:
-    input:
-        chain='%s/{s1}.{s2}.all.pre.chain' %chain_dir,
-    output:
-        '{tbl_dir}/{s1}.{s2}.tbl'
-    shell:
-        'chainToTbl.py {input} {output}'
+# rule chain_to_tbl:
+#     input:
+#         chain='%s/{s1}.{s2}.all.pre.chain' %chain_dir,
+#     output:
+#         '{tbl_dir}/{s1}.{s2}.tbl'
+#     shell:
+#         'chainToTbl.py {input} {output}'
         
 rule all_pre_chain:
     input:
