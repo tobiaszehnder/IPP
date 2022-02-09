@@ -107,7 +107,7 @@ def main():
     parser.add_argument('-q', '--quiet', action="store_true", help='do not produce any log output')
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
     parser.add_argument('-s', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
-    parser.add_argument('-i', '--include_anchors', action='store_true', help='include anchors in results table')
+    parser.add_argument('-a', '--include_anchors', action='store_true', help='include anchors in results table')
     args = parser.parse_args()
 
     # check if files exist
