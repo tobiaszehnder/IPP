@@ -7,26 +7,26 @@ Pipeline for computing pairwise alignments for all species pairs in a list of gi
 Usage: prun mdl ${0##*/} -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
 
 required (one of both):
-	-s SPECIES		Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
-	-t TARGETS		Comma-separated list or file with target files (e.g. a list of chain files) to be produced
+	-s SPECIES			Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
+	-t TARGETS			Comma-separated list or file with target files (e.g. a list of chain files) to be produced
 
 optional:
-	-c CREATE_PWALN_COLLECTION		Flag for creating a pairwise alingment collection file. Used as input for IPP.
-	-r REFERENCE	Reference species. Necessary for naming the collection file.
-	-q QUERY		Query species. Necessary for naming the collection file.
-	-d DATA_DIR		Output directory. The script will create a predefined folder structure in that directory
-	   			(e.g. separate folders for alignment files, fasta files, etc.)
-	-f FORCE		Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
-	-@ NTHREADS		Number of parallel threads
-	-n DRY_RUN		Flag for a dry run, i.e. only print the commands instead of executing
-	-! SNAKEMAKE_ARGS	Optional arguments for Snakemake in quotes, i.e. -! "--debug-dag --unlock -p"
+	-c CREATE_PWALN_COLLECTION	Flag for creating a pairwise alingment collection file. Used as input for IPP
+	-r REFERENCE			Reference species. Necessary for naming the collection file
+	-q QUERY			Query species. Necessary for naming the collection file
+	-d DATA_DIR			Output directory. The script will create a predefined folder structure in that directory
+	   				(e.g. separate folders for alignment files, fasta files, etc.)
+	-f FORCE			Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
+	-@ NTHREADS			Number of parallel threads
+	-n DRY_RUN			Flag for a dry run, i.e. only print the commands instead of executing
+	-! SNAKEMAKE_ARGS  		Optional arguments for Snakemake in quotes, i.e. -! "--debug-dag --unlock -p"
 EOF
 }
 
 # parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
 create_pwaln_collection=False
-ref=""
-qry=""
+ref=None
+qry=None
 data_dir="/project/ipp-data"
 force="none"
 nthreads="--cores 1"
@@ -51,7 +51,7 @@ done
 
 # throw error if not all mandatory arguments are passed
 if [ -z ${species+x} ] && [ -z ${targets+x} ]; then usage && exit 1; fi
-[[ $create_pwaln_collection == True ]] && [[ $ref == "" || $qry == "" ]] && usage && exit 1
+[[ $create_pwaln_collection == True ]] && [[ $ref == None || $qry == None ]] && usage && exit 1
 
 # define which rules to force run
 if [[ $force == "all" ]]; then
@@ -86,5 +86,5 @@ snakemake \
 	$nthreads
 """
 
-if [[ $nthreads == '-nr' ]]; then echo $cmd; fi # print command during dry run
+if [[ $nthreads == *-n ]]; then echo $cmd; fi # print command during dry run
 eval $cmd # run snakefile
