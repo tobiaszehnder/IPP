@@ -259,7 +259,7 @@ def main():
 
     # write list of coord names of unmapped regions to file
     regions_file_basename = os.path.splitext(os.path.basename(args.regions_file))[0]
-    outfile_unmapped = os.path.join(args.out_dir, regions_file_basename) + '.unmapped'
+    outfile_unmapped = os.path.join(args.out_dir, '{}.{}-{}.unmapped'.format(regions_file_basename, args.ref, args.qry))
     log('Writing unmapped regions to:\n\t%s' %outfile_unmapped)
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
@@ -298,7 +298,7 @@ def main():
     results_df.insert(6, 'functional_conservation', functional_conservation)
 
     # write results table to file
-    outfile_table = os.path.join(args.out_dir, regions_file_basename) + '.proj'
+    outfile_table = os.path.join(args.out_dir, '{}.{}-{}.proj'.format(regions_file_basename, args.ref, args.qry))
     if results_df.shape[0] == 0:
         log('No regions from the input bed files could be projected\nDone')
         return
