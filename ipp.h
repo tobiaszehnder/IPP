@@ -184,16 +184,16 @@ private:
                                  std::string const& qrySpecies,
                                  Coords const& refCoords) const;
 
-    std::optional<GenomicProjectionResult> projectGenomicLocation(
+    std::vector<GenomicProjectionResult> projectGenomicLocation(
         std::string const& refSpecies,
         std::string const& qrySpecies,
         Coords const& refCoords,
         uint64_t genomeSizeRef) const;
 
-    std::optional<Anchors> getAnchors(Pwaln const& pwaln,
-                                      std::string const& refSpecies,
-                                      Coords const& refCoords,
-                                      std::string const& qrySpecies) const;
+    std::vector<Anchors> getAnchors(Pwaln const& pwaln,
+                                    std::string const& refSpecies,
+                                    Coords const& refCoords,
+                                    std::string const& qrySpecies) const;
 
     static std::vector<PwalnEntry const*> longestSubsequence(
         std::vector<PwalnEntry const*> const& seq);

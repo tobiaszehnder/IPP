@@ -456,42 +456,45 @@ Ipp::projectCoord(std::string const& refSpecies,
                 std::cout << "--> " << nxtSpecies << std::endl;
             }
 
-            std::optional<GenomicProjectionResult> const proj(
+            std::vector<GenomicProjectionResult> const projs(
                 projectGenomicLocation(currentSpecies,
                                        nxtSpecies,
                                        currentCoords,
                                        genomeSizeRef));
-            if (!proj) {
+            if (projs.empty()) {
                 continue;
                 // No path was found.
             }
 
             if(currentSpecies == refSpecies && nxtSpecies == qrySpecies) {
                 // Direct projection.
-                coordProjection.direct = *proj;
+                coordProjection.direct = projs[0];
             }
 
-            double const nxtScore(current.score * proj->score);
-            const auto [it2, success] = shortestPath.try_emplace(
-                {nxtSpecies, proj->nextCoords},
-                nxtScore, proj->anchors, current.spKey, &it->second);
-            if (success || it2->second.score < nxtScore) {
-                if (!success) {
-                    // There was already an entry in shortestPath but it had a
-                    // worse score -> replace.
-                    it2->second.score = nxtScore;
-                    it2->second.anchors = proj->anchors;
-                    it2->second.prevKey = current.spKey;
-                    it2->second.prevEntry = &it->second;
-                }
+            for (GenomicProjectionResult const& proj : projs) {
+                double const nxtScore(current.score * proj.score);
+                const auto [it2, success] = shortestPath.try_emplace(
+                    {nxtSpecies, proj.nextCoords},
+                    nxtScore, proj.anchors, current.spKey, &it->second);
+                if (success || it2->second.score < nxtScore) {
+                    if (!success) {
+                        // There was already an entry in shortestPath but it had
+                        // a worse score -> replace.
+                        it2->second.score = nxtScore;
+                        it2->second.anchors = proj.anchors;
+                        it2->second.prevKey = current.spKey;
+                        it2->second.prevEntry = &it->second;
+                    }
 
-                // Only increase the path length if we don't reach the query
-                // species as the next hop. This ensures that for the same
-                // score we prefer the path that reaches the qry species first.
-                int const nxtPathLength(nxtSpecies != qrySpecies
-                                        ? current.pathLength + 1
-                                        : current.pathLength);
-                orange.emplace(nxtScore, nxtPathLength, &it2->first);
+                    // Only increase the path length if we don't reach the query
+                    // species as the next hop. This ensures that for the same
+                    // score we prefer the path that reaches the qry species
+                    // first.
+                    int const nxtPathLength(nxtSpecies != qrySpecies
+                                            ? current.pathLength + 1
+                                            : current.pathLength);
+                    orange.emplace(nxtScore, nxtPathLength, &it2->first);
+                }
             }
         }
     }
@@ -575,7 +578,7 @@ insertIfMajorQryChromosome(
 
 } // namespace
 
-std::optional<Ipp::GenomicProjectionResult>
+std::vector<Ipp::GenomicProjectionResult>
 Ipp::projectGenomicLocation(std::string const& refSpecies,
                             std::string const& qrySpecies,
                             Coords const& refCoords,
@@ -591,9 +594,12 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         return {};
     }
 
-    auto const anchors(
+    // Get the anchors; this either returns an empty list in case no anchors
+    // were found, a list with only one entry for the closest up- and downstream
+    // anchors, or a list of possibly many direct alignments.
+    auto const anchorsList(
         getAnchors(it2->second, refSpecies, refCoords, qrySpecies));
-    if (!anchors) {
+    if (anchorsList.empty()) {
         // If no or only one anchor is found because of border region, return 0
         // score and empty coordinate string.
         return {};
@@ -607,33 +613,41 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
     // Note: The qry coords might be reversed (up.start > up.end). Either both
     //       anchors are reversed or both are not.
     //       The ref coords are never reversed.
-    uint32_t qryLoc;
-    double score;
-    if (anchors->upstream == anchors->downstream) {
-        // refLoc lies on an aligment.
+    std::vector<GenomicProjectionResult> ret;
+    if (anchorsList[0].upstream == anchorsList[0].downstream) {
+        // refLoc lies on an aligment (or multiple).
         //  [  up.ref  ]
         //  [ down.ref ]
         //          x
-        uint32_t const refUpBound(anchors->upstream.refStart());
-        uint32_t const refDownBound(anchors->upstream.refEnd());
-        uint32_t const qryUpBound(anchors->upstream.qryStart());
+        ret.reserve(anchorsList.size());
+        for (Anchors const& anchors : anchorsList) {
+            uint32_t const refUpBound(anchors.upstream.refStart());
+            uint32_t const refDownBound(anchors.upstream.refEnd());
+            uint32_t const qryUpBound(anchors.upstream.qryStart());
 
-        assert(refUpBound <= refLoc && refLoc <= refDownBound);
+            assert(refUpBound <= refLoc && refLoc <= refDownBound);
 
-        // Both endpoints are inclusive and the ref region is guaranteed to be
-        // the same size than the qry region.
-        score = 1.0d;
-        qryLoc = !anchors->upstream.isQryReversed()
-            ? qryUpBound + (refLoc - refUpBound)
-            : qryUpBound - (refLoc - refUpBound);
+            // Both endpoints are inclusive and the ref region is guaranteed to be
+            // the same size than the qry region.
+            uint32_t const qryLoc(!anchors.upstream.isQryReversed()
+                                  ? qryUpBound + (refLoc - refUpBound)
+                                  : qryUpBound - (refLoc - refUpBound));
+
+            ret.emplace_back(1.0d,
+                             Coords(anchors.upstream.qryChrom(), qryLoc),
+                             anchors);
+        }
     } else {
         // [ up.ref ]  x    [ down.ref ]
-        assert(anchors->upstream.isQryReversed()
-               == anchors->downstream.isQryReversed());
-        uint32_t const refUpBound(anchors->upstream.refEnd());
-        uint32_t const refDownBound(anchors->downstream.refStart()); 
-        uint32_t const qryUpBound(anchors->upstream.qryEnd());
-        uint32_t const qryDownBound(anchors->downstream.qryStart());
+        assert(anchorsList.size()==1
+               &&"Only one anchors pair expected if no direct alignment");
+        Anchors const& anchors(anchorsList[0]);
+        assert(anchors.upstream.isQryReversed()
+               == anchors.downstream.isQryReversed());
+        uint32_t const refUpBound(anchors.upstream.refEnd());
+        uint32_t const refDownBound(anchors.downstream.refStart()); 
+        uint32_t const qryUpBound(anchors.upstream.qryEnd());
+        uint32_t const qryDownBound(anchors.downstream.qryStart());
 
         // Both endpoints are exclusive.
         assert(refUpBound < refLoc && refLoc < refDownBound);
@@ -641,11 +655,11 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         // ONLY USE DISTANCE TO CLOSE ANCHOR AT REF SPECIES, because at the qry
         // species it should be roughly the same as it is a projection of the
         // reference.
-        score = projectionScore(refLoc,
-                                refUpBound,
-                                refDownBound,
-                                genomeSizes_.at(refSpecies),
-                                genomeSizeRef);
+        double const score(projectionScore(refLoc,
+                                           refUpBound,
+                                           refDownBound,
+                                           genomeSizes_.at(refSpecies),
+                                           genomeSizeRef));
 
         // +0.5 to bring the projection into the middle of the projected qry
         // region of potentially different size:
@@ -657,21 +671,24 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         //     (vs. 114 w/o the +0.5).
         double const relativeRefLoc(
             1.0d*(refLoc - refUpBound + 0.5) / (refDownBound - refUpBound));
-        bool const isQryReversed(anchors->upstream.isQryReversed());
-        qryLoc = !isQryReversed
+        bool const isQryReversed(anchors.upstream.isQryReversed());
+        uint32_t const qryLoc(
+            !isQryReversed
             ? qryUpBound + relativeRefLoc*(qryDownBound - qryUpBound)
-            : qryUpBound - relativeRefLoc*(qryUpBound - qryDownBound);
+            : qryUpBound - relativeRefLoc*(qryUpBound - qryDownBound));
 
         // <= and >= below in case the qry range is of size <= 1 (then the
         // projection is onto the lower boundary).
         assert((!isQryReversed && qryUpBound <= qryLoc && qryLoc < qryDownBound)
                ||(isQryReversed && qryUpBound > qryLoc && qryLoc >= qryDownBound));
+        ret.emplace_back(score,
+                         Coords(anchors.upstream.qryChrom(), qryLoc),
+                         anchors);
     }
-
-    return {{score, {anchors->upstream.qryChrom(), qryLoc}, *anchors}};
+    return ret;
 }
 
-std::optional<Ipp::Anchors>
+std::vector<Ipp::Anchors>
 Ipp::getAnchors(Pwaln const& pwaln,
                 std::string const& refSpecies,
                 Coords const& refCoords,
@@ -855,8 +872,8 @@ Ipp::getAnchors(Pwaln const& pwaln,
     // filtered closestAnchors (that include a potential ovAln);
     // if not, it was an outlier alignment and was filtered out
     PwalnEntry const* closestUpstreamAnchor(nullptr);
-    PwalnEntry const* closestOvAlnAnchor(nullptr);
     PwalnEntry const* closestDownstreamAnchor(nullptr);
+    std::vector<PwalnEntry const*> ovAlnAnchors;
     for (PwalnEntry const* anchor : closestAnchors) {
         if (anchor->refEnd() < refLoc) {
             if (!closestUpstreamAnchor
@@ -872,35 +889,17 @@ Ipp::getAnchors(Pwaln const& pwaln,
                 break;
             }
         } else {
-            if (false&&closestOvAlnAnchor) {
-                // An overlapping direct mapping found.
-                std::cerr << std::endl;
-                std::cerr << format("WARNING: Overlapping direct mapping for "
-                                    "(%s -> %s @ %s:%u): ",
-                                    refSpecies.c_str(),
-                                    qrySpecies.c_str(),
-                                    chroms_.at(refCoords.chrom).c_str(),
-                                    refCoords.loc) << std::endl;
-
-                auto const printAnchor = [this](PwalnEntry const* anchor) {
-                    std::cerr << "    refStart: " << anchor->refStart() << std::endl;
-                    std::cerr << "    refEnd: " << anchor->refEnd() << std::endl;
-                    std::cerr << "    qryChrom: " << chroms_.at(anchor->qryChrom()) << std::endl;
-                    std::cerr << "    qryStart: " << anchor->qryStart() << std::endl;
-                    std::cerr << "    qryEnd: " << anchor->qryEnd() << std::endl;
-                };
-                std::cerr << "  anchor 1" << std::endl;
-                printAnchor(closestOvAlnAnchor);
-                std::cerr << "  anchor 2" << std::endl;
-                printAnchor(anchor);
-                std::cerr << std::endl;
-            }
-            closestOvAlnAnchor = anchor;
+            ovAlnAnchors.push_back(anchor);
         }
     }
-    if (closestOvAlnAnchor) {
-        // We found a direct mapping.
-        return {{*closestOvAlnAnchor, *closestOvAlnAnchor}};
+
+    std::vector<Anchors> ret;
+    if (!ovAlnAnchors.empty()) {
+        // We found direct mapping(s).
+        ret.reserve(ovAlnAnchors.size());
+        for (PwalnEntry const* ovAlnAnchor : ovAlnAnchors) {
+            ret.emplace_back(*ovAlnAnchor, *ovAlnAnchor);
+        }
     } else {
         if (!closestUpstreamAnchor || !closestDownstreamAnchor) {
             // Not both up- and downstream anchors were found (e.g. at synteny
@@ -909,8 +908,9 @@ Ipp::getAnchors(Pwaln const& pwaln,
             return {};
         }
 
-        return {{*closestUpstreamAnchor, *closestDownstreamAnchor}};
+        ret.emplace_back(*closestUpstreamAnchor, *closestDownstreamAnchor);
     }
+    return ret;
 }
 
 namespace {
