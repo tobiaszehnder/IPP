@@ -264,10 +264,10 @@ def main():
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
 
-    def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh=.95, maxgap=500):
+    def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh_dc=.99, thresh_ic=.95, maxgap=500):
         ### function for determining the conservation of sequence (DC/IC/NC) and function (+/-)  
         # determine sequence conservation
-        sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] == 1 else 'IC' if x['score_multi'] >= thresh else 'NC', axis=1)
+        sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] >= thresh_dc else 'IC' if x['score_multi'] >= thresh_ic else 'NC', axis=1)
         # create PyRanges object of projections
         df_multi = pd.DataFrame({'Name':df_projections.index,
                                  'Chromosome': [x.chrom for x in df_projections['coords_multi']],
@@ -288,12 +288,13 @@ def main():
         
     # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
     log('Classifying projections')
-    thresh = .95
+    thresh_dc = .99
+    thresh_ic = .95
     maxgap = 500
     target_regions = None
     if args.target_bedfile is not None:
         target_regions = pr.read_bed(args.target_bedfile)
-    sequence_conservation, functional_conservation = classify_conservation(results_df, target_regions, thresh, maxgap)
+    sequence_conservation, functional_conservation = classify_conservation(results_df, target_regions, thresh_dc, thresh_ic, maxgap)
     results_df.insert(5, 'sequence_conservation', sequence_conservation)
     results_df.insert(6, 'functional_conservation', functional_conservation)
 
