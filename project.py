@@ -101,12 +101,13 @@ def main():
     parser.add_argument('qry', help='query species')
     parser.add_argument('path_pwaln')
     parser.add_argument('-o', '--out_dir', default=os.getcwd(), help='directory for output files')
+    parser.add_argument('-s', '--score_threshold', type=float, default=0.95, help='score threshold for indirect conservation detection')
     parser.add_argument('-n', '--n_cores', type=int, default=1, help='number of CPUs')
     parser.add_argument('-t', '--target_bedfile', default=None, help='functional regions in target species to check for overlap with projections for classification')
     parser.add_argument('-d', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
     parser.add_argument('-q', '--quiet', action="store_true", help='do not produce any log output')
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
-    parser.add_argument('-s', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
+    parser.add_argument('-c', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
     parser.add_argument('-a', '--include_anchors', action='store_true', help='include anchors in results table')
     args = parser.parse_args()
 
@@ -288,8 +289,8 @@ def main():
         
     # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
     log('Classifying projections')
-    thresh_dc = .99
-    thresh_ic = .95
+    thresh_ic = args.score_threshold
+    thresh_dc = max(.99, thresh_ic) # thresh_dc is not allowed to be lower than thresh_ic
     maxgap = 500
     target_regions = None
     if args.target_bedfile is not None:
