@@ -205,7 +205,7 @@ Ipp::projectionScore(uint32_t loc,
                      uint32_t upBound,
                      uint32_t downBound,
                      uint64_t genomeSize,
-                     uint64_t genomeSizeRef) const {
+                     uint64_t genomeSizeBasis) const {
     // Anchors must be the locations of the up- and downstream anchors, not the
     // data frame with ref and qry coordinates.
     // The scaling factor determines how fast the function falls when moving
@@ -213,10 +213,11 @@ Ipp::projectionScore(uint32_t loc,
     // Ideally, we define a half-life X_half, i.e. at a distance of X_half, the
     // model is at 0.5. With a scaling factor of 50 kb, X_half is at 20 kb (with
     // 100 kb at 10 kb).
-    // score = 0.5^{minDist * genomeSizeRef / (genomeSize * halfLifeDistance_)}
+    // score = 0.5^{minDist * genomeSizeBasis / (genomeSize * halfLifeDistance_)}
+
     uint32_t const minDist(std::min(loc - upBound, downBound - loc));
     double const exp(((1.0d*minDist) / halfLifeDistance_)
-                     * ((1.0d*genomeSizeRef) / genomeSize));
+                     * ((1.0d*genomeSizeBasis) / genomeSize));
     double const score(std::pow(0.5d, exp));
     assert(0 <= score && score <= 1);
     return score;
@@ -394,7 +395,12 @@ Ipp::projectCoord(std::string const& refSpecies,
                   << refCoords.chrom << ":" << refCoords.loc << std::endl;
     }
 
-    uint64_t const genomeSizeRef(genomeSizes_.at(refSpecies));
+	// Define basis genome size as the mouse genome mm39
+	// That way, scores from projections from different reference genomes
+	// will be comparable to each other because they are relative to the
+	// basis genome.
+	uint64_t const genomeSizeBasis(2728222451);
+	// uint64_t const genomeSizeRef(genomeSizes_.at(refSpecies));
 
     CoordProjection coordProjection;
     std::unordered_map<ShortestPathMapKey, ShortestPathMapEntry> shortestPath;
@@ -460,7 +466,7 @@ Ipp::projectCoord(std::string const& refSpecies,
                 projectGenomicLocation(currentSpecies,
                                        nxtSpecies,
                                        currentCoords,
-                                       genomeSizeRef));
+                                       genomeSizeBasis));
             if (projs.empty()) {
                 continue;
                 // No path was found.
@@ -582,7 +588,7 @@ std::vector<Ipp::GenomicProjectionResult>
 Ipp::projectGenomicLocation(std::string const& refSpecies,
                             std::string const& qrySpecies,
                             Coords const& refCoords,
-                            uint64_t genomeSizeRef) const {
+                            uint64_t genomeSizeBasis) const {
     auto const it1(pwalns_.find(refSpecies));
     if (it1 == pwalns_.end()) {
         // There is no pairwise alignment for the ref species.
@@ -659,7 +665,7 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                                            refUpBound,
                                            refDownBound,
                                            genomeSizes_.at(refSpecies),
-                                           genomeSizeRef));
+                                           genomeSizeBasis));
 
         // +0.5 to bring the projection into the middle of the projected qry
         // region of potentially different size:
