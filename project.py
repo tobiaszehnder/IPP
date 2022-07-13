@@ -104,12 +104,13 @@ def main():
     parser.add_argument('-s', '--score_threshold', type=float, default=0.95, help='score threshold for indirect conservation detection')
     parser.add_argument('-n', '--n_cores', type=int, default=1, help='number of CPUs')
     parser.add_argument('-t', '--target_bedfile', default=None, help='functional regions in target species to check for overlap with projections for classification')
-    parser.add_argument('-d', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
+    # parser.add_argument('-d', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
     parser.add_argument('-q', '--quiet', action="store_true", help='do not produce any log output')
     parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
     parser.add_argument('-c', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
     parser.add_argument('-a', '--include_anchors', action='store_true', help='include anchors in results table')
     args = parser.parse_args()
+    half_life_distance = 10000
 
     # check if files exist
     with open(args.regions_file):
