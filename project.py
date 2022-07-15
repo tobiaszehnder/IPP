@@ -95,23 +95,26 @@ def debug_shortest_path(shortest_path, simple):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Independent Point Projections (IPP).\nA method for projecting genomic point coordinates between genomes with large evolutionary distances.')
+    parser = argparse.ArgumentParser(description='Independent Point Projections (IPP).\nA method for projecting genomic point coordinates between genomes with large evolutionary distances.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)#RawTextHelpFormatter)
     parser.add_argument('regions_file', help='Bed file containing genomic coordinates. regions with width > 1 will be centered.')
-    parser.add_argument('ref', help='reference species')
-    parser.add_argument('qry', help='query species')
+    parser.add_argument('ref', help='Reference species')
+    parser.add_argument('qry', help='Query species')
     parser.add_argument('path_pwaln')
-    parser.add_argument('-o', '--out_dir', default=os.getcwd(), help='directory for output files')
-    parser.add_argument('-s', '--score_threshold', type=float, default=0.95, help='score threshold for indirect conservation detection')
-    parser.add_argument('-n', '--n_cores', type=int, default=1, help='number of CPUs')
-    parser.add_argument('-t', '--target_bedfile', default=None, help='functional regions in target species to check for overlap with projections for classification')
-    # parser.add_argument('-d', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
-    parser.add_argument('-q', '--quiet', action="store_true", help='do not produce any log output')
-    parser.add_argument('-v', '--verbose', action="store_true", help='produce additional debugging output')
-    parser.add_argument('-c', '--simple_coords', action="store_true", help='make coord numbers in debug output as small as possible')
-    parser.add_argument('-a', '--include_anchors', action='store_true', help='include anchors in results table')
+    parser.add_argument('-o', '--out_dir', default=os.getcwd(), help='Directory for output files')
+    parser.add_argument('-sdc', '--score_DC', type=float, default=0.98, help='Score threshold for direct conservation detection')
+    parser.add_argument('-sic', '--score_IC', type=float, default=0.84, help='Score threshold for indirect conservation detection')
+    parser.add_argument('-ddc', '--distance_DC', type=float, default=300, help='Distance threshold for direct conservation detection.\nRegions up to this distance to the closest anchor will be considered as directly conserved.\nUsed instead of score_threshold.')
+    parser.add_argument('-dic', '--distance_IC', type=float, default=2500, help='Distance threshold for indirect conservation detection.\nRegions up to this distance to the closest anchor will be considered as indirectly conserved.\nUsed instead of score_threshold.')
+    parser.add_argument('-dfc', '--distance_FC', type=float, default=500, help='Distance threshold for functional conservation detection.\nRegions up to this distance to the closest region in the target_bedfile will be considered as functionally conserved.')
+    parser.add_argument('-n', '--n_cores', type=int, default=1, help='Number of CPUs')
+    parser.add_argument('-t', '--target_bedfile', default=None, help='Functional regions in target species to check for overlap with projections for classification')
+    # parser.add_argument('-dhl', '--half_life_distance', type=int, default=10000, help='distance to closest anchor point at which projection score is 0.5')
+    parser.add_argument('-q', '--quiet', action="store_true", help='Do not produce any log output')
+    parser.add_argument('-v', '--verbose', action="store_true", help='Produce additional debugging output')
+    parser.add_argument('-c', '--simple_coords', action="store_true", help='Make coord numbers in debug output as small as possible')
+    parser.add_argument('-a', '--include_anchors', action='store_true', help='Include anchors in results table')
     args = parser.parse_args()
-    half_life_distance = 10000
-
+    
     # check if files exist
     with open(args.regions_file):
         pass
@@ -131,10 +134,26 @@ def main():
 
     #input("about to init ipp")
     log("Loading pairwise alignments")
+    half_life_distance = 10000
     myIpp = ipp.Ipp()
     myIpp.load_pwalns(args.path_pwaln)
-    myIpp.set_half_life_distance(args.half_life_distance)
+    myIpp.set_half_life_distance(half_life_distance)
 
+    # compute score thresholds if distance thresholds were passed
+    # score = 0.5^{minDist * genomeSizeBasis / (genomeSize * halfLifeDistance_)}
+    genome_size_basis = 2728222451 # mouse mm39 genome size
+    genome_size_ref = myIpp.get_genome_size(args.ref)
+    score_DC = args.score_DC
+    score_IC = args.score_IC
+    if args.distance_DC is not None:
+        score_DC = round(0.5**(args.distance_DC * genome_size_basis / (genome_size_ref * half_life_distance)), 3)
+        log('DC distance threshold passed (%i). Corresponding DC score threshold set to %s' %(args.distance_DC, score_DC))
+    if args.distance_IC is not None:
+        score_IC = round(0.5**(args.distance_IC * genome_size_basis / (genome_size_ref * half_life_distance)), 3)
+        log('IC distance threshold passed (%i). Corresponding IC score threshold set to %s' %(args.distance_IC, score_IC))
+    if score_DC < score_IC:
+        sys.exit('Error: score_DC must not be lower than score_IC')
+    
     #input('Press enter to start')
     log('Reading regions from %s' %(args.regions_file))
 
@@ -266,7 +285,7 @@ def main():
     with open(outfile_unmapped, 'w') as f:
         f.write('\n'.join(unmapped_regions) + '\n')
 
-    def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh_dc=.99, thresh_ic=.95, maxgap=500):
+    def classify_conservation(df_projections, target_regions=pr.PyRanges(), thresh_dc=score_DC, thresh_ic=score_IC, maxgap=args.distance_FC):
         ### function for determining the conservation of sequence (DC/IC/NC) and function (+/-)  
         # determine sequence conservation
         sequence_conservation = df_projections.apply(lambda x: 'DC' if x['score_direct'] >= thresh_dc else 'IC' if x['score_multi'] >= thresh_ic else 'NC', axis=1)
@@ -290,13 +309,10 @@ def main():
         
     # classify projections according to conservation of sequence (DC/IC/NC) and function (+/-)
     log('Classifying projections')
-    thresh_ic = args.score_threshold
-    thresh_dc = max(.99, thresh_ic) # thresh_dc is not allowed to be lower than thresh_ic
-    maxgap = 500
     target_regions = None
     if args.target_bedfile is not None:
         target_regions = pr.read_bed(args.target_bedfile)
-    sequence_conservation, functional_conservation = classify_conservation(results_df, target_regions, thresh_dc, thresh_ic, maxgap)
+    sequence_conservation, functional_conservation = classify_conservation(results_df, target_regions, score_DC, score_IC, args.distance_FC)
     results_df.insert(5, 'sequence_conservation', sequence_conservation)
     results_df.insert(6, 'functional_conservation', functional_conservation)
 
@@ -337,6 +353,7 @@ def main():
     bed_ref.to_csv(outfile_bed_ref, sep='\t', index=False, header=None, float_format='%.3f')
     bed_qry.to_csv(outfile_bed_qry, sep='\t', index=False, header=None, float_format='%.3f')
 
+    log('NOTE: If you compare projections from different reference genomes to each other (e.g. mouse -> chicken and chicken -> mouse), always use the SAME SCORE thresholds.\nIPP adjusts the scores to the genome sizes. Projections with same distance thresholds from different genomes are not comparable.\n')
     log('Done')
     return
     
