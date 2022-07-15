@@ -178,6 +178,12 @@ Ipp::loadPwalns(std::string const& fileName) {
     }
 }
 
+uint64_t
+Ipp::getGenomeSize(std::string const& speciesName) {
+  // Returns the genome size for a given species name
+  return genomeSizes_[speciesName];
+}
+
 void
 Ipp::setHalfLifeDistance(unsigned halfLifeDistance) {
     // Sets the half-life distance;

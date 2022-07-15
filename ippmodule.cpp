@@ -108,6 +108,23 @@ ippLoadPwalns(PyIpp* self, PyObject* args) {
 }
 
 static PyObject*
+ippGetGenomeSize(PyIpp* self, PyObject* args) {
+    // Returns the genome size for a given species.
+    char const* speciesName;
+    if (!PyArg_ParseTuple(args,"s", &speciesName)) {
+	  return nullptr;
+    }
+	
+    try {
+	  uint64_t const genomeSize(self->ipp.getGenomeSize(speciesName));
+	  return PyLong_FromUnsignedLongLong(genomeSize);
+    } catch (std::exception const& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+  
+static PyObject*
 ippSetHalfLifeDistance(PyIpp* self, PyObject* args) {
     // Sets the half-life distance.
     unsigned halfLifeDistance;
@@ -266,6 +283,7 @@ ippCancel(PyIpp* self, PyObject* args) {
 
 static PyMethodDef ippMethods[] = {
     {"load_pwalns", (PyCFunction)ippLoadPwalns, METH_VARARGS, "Reads the chromosomes and pwalns from the given file"},
+	{"get_genome_size", (PyCFunction)ippGetGenomeSize, METH_VARARGS, "Returns the genome size for a given species name"},
     {"set_half_life_distance", (PyCFunction)ippSetHalfLifeDistance, METH_VARARGS, "Sets the half-life distance"},
     {"project_coords", (PyCFunction)ippProjectCoords, METH_VARARGS, ""},
     {"cancel", (PyCFunction)ippCancel, METH_VARARGS, "Cancel ongoing project_coords() call"},

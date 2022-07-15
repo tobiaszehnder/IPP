@@ -84,6 +84,9 @@ public:
     void loadPwalns(std::string const& fileName);
     // Reads the chromosomes and pwalns from the given file.
 
+    uint64_t getGenomeSize(std::string const& speciesName);
+    // Returns the genome size for a given species name
+
     void setHalfLifeDistance(unsigned halfLifeDistance);
     // Sets the half-life distance.
 
