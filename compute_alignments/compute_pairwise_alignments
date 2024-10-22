@@ -4,9 +4,9 @@ usage() {
 cat << EOF
 Pipeline for computing pairwise alignments for all species pairs in a list of given species
 
-Usage: prun mdl ${0##*/} -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
+Usage: ${0##*/} -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
 
-required (one of both):
+required (one or the other):
 	-s SPECIES			Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
 	-t TARGETS			Comma-separated list or file with target files (e.g. a list of chain files) to be produced
 
@@ -27,7 +27,7 @@ EOF
 create_pwaln_collection=False
 ref=None
 qry=None
-data_dir="/project/ipp-data"
+data_dir="./ipp-data"
 force="none"
 nthreads="--cores 1"
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # directory of this script
@@ -51,7 +51,7 @@ done
 
 # throw error if not all mandatory arguments are passed
 if [ -z ${species+x} ] && [ -z ${targets+x} ]; then usage && exit 1; fi
-[[ $create_pwaln_collection == True ]] && [[ $ref == None || $qry == None ]] && usage && exit 1
+[[ $create_pwaln_collection == True ]] && [[ -z $ref || -z $qry ]] && usage && exit 1
 
 # define which rules to force run
 if [[ $force == "all" ]]; then
