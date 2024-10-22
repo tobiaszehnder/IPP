@@ -22,7 +22,7 @@ IPP has also been previously applied [HERE](https://doi.org/10.1038%2Fs41588-022
 --- 
 
 ## Installation
-1. Download or clone the repository from Github and go to the diretory.
+1. Download or clone the repository from Github and go to the directory.
 2. Compile the module: `python setup.py build`
 3. Tell python where to look for your module.
    Use the directory that is created according to your python version, e.g.:
