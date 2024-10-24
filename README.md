@@ -102,7 +102,7 @@ required (one or the other):
 optional:
   -c CREATE_PWALN_COLLECTION		Flag for creating the pwaln collection file. Used as input for IPP
   -r REFERENCE		Reference species. Necessary for naming the collection file
-  -q QUERY			Query species. Necessary for naming the collection file
+  -q QUERY			Query species. Necessary for naming the collection file. If no query is provided, will generate for all non-reference species. 
   -d DATA_DIR   		Output directory. The script will create a predefined folder structure in that directory. (e.g. separate folders for alignment files, fasta files, etc.)
   -f FORCE			Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
   -@ NTHREADS     	Number of parallel threads
