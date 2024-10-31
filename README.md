@@ -57,7 +57,7 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -o OUT_DIR, --out_dir OUT_DIR
-                        Directory for output files (default: /project/ibr_procs/IPP)
+                        Directory for output files (default: ./ipp-data/)
   -sdc SCORE_DC, --score_DC SCORE_DC
                         Score threshold for direct conservation detection (default: 0.98)
   -sic SCORE_IC, --score_IC SCORE_IC
