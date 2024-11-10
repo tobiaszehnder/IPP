@@ -36,9 +36,9 @@ IPP has also been previously applied [HERE](https://doi.org/10.1038%2Fs41588-022
 
 
 ## Quick start
-Project any regions of interest as a BED-file provided:
-1. `regions.bed`
-2. `pwaln file generated for the species pair`
+Project any regions of interest from one species to another. The following files need to be provided:
+1. `regions.bed` - A BED file containing the regions of interest in the first species
+2. `pwaln file generated for the species pair` - A binarized collection of pairwise alignments between the reference, target, and all bridging species. We describe below how to obtain this.
 
 For example, to project a set of enhancers from mm39 (reference) to galGal6 (target) using 10 cores:
 
