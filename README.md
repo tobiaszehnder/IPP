@@ -12,6 +12,13 @@ If you are using IPP, please cite our [preprint](https://www.biorxiv.org/content
 ## Introduction
 
 ### Method background
+
+<figure>
+  <img src="figs/IPP.png" alt="IPP method background" width="800">
+  <figcaption><strong>Figure 1.  IPP </strong>  Synteny-based proximity to direct/indirectly aligned regions determines orthology between features (e.g. ATAC-peak summits).</figcaption>
+</figure>
+
+
 For a genomic region with conserved synteny, any non-alignable coordinate can be approximately projected from one genome to another by linear interpolation of its relative position between two alignable anchor points.
 The accuracy of such interpolations negatively correlates with the distance to the anchor points. Therefore, projections between species with large evolutionary distances (e.g. > 200 my) tend to be inaccurate due to a low anchor point density. Including so-called **bridging species** may increase the anchor point density and thus improve projection accuracy.
 The optimal choice and combination of bridging species may vary from one genomic location to another. This presents a shortest path problem in a graph where every node is a species and the weighted edges between nodes represent distances of genomic locations to their anchor points (|x - a|). We established a scoring function that exponentially decreases with increasing distances |x - a|. The shortest path problem is solved using Dijkstra’s Shortest Path Algorithm (Dijkstra, 1959).
