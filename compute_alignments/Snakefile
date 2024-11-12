@@ -21,7 +21,7 @@ for dr in [assembly_dir, alignment_dir, fasta_dir, lastdb_dir, chain_dir, maf_di
     if not os.path.exists(dr):
         os.makedirs(dr)
 
-# define targets (if not passed)
+# define targets (if not passed). 
 try:
     targets = target_list.split(',')
     species_list = []
@@ -29,7 +29,14 @@ except NameError:
     species_list=species_list.split(',')
     targets = [chain_dir + '/%s.%s.all.pre.chain' %(sp1,sp2) for sp1 in species_list for sp2 in species_list if not sp1 == sp2]
     if create_pwaln_collection:
-        targets += ['{}/{}.{}.pwaln.bin'.format(pwaln_dir, ref, qry)]
+        if qry is None: ## if no qry species is given, generate pwaln collection for every other species in the list != ref
+            targets += [
+                pwaln_dir + '/{}.{}.pwaln.bin'.format(ref, s)
+                for s in species_list
+                if not ref == s
+            ]
+        else:
+            targets += ['{}/{}.{}.pwaln.bin'.format(pwaln_dir, ref, qry)]
 
 ### RULES ###
 
@@ -49,13 +56,6 @@ rule collect_and_binarize_pwalns:
     shell:
         'collect_pwalns.py {params} {output}'
         
-# rule chain_to_tbl:
-#     input:
-#         chain='%s/{s1}.{s2}.all.pre.chain' %chain_dir,
-#     output:
-#         '{tbl_dir}/{s1}.{s2}.tbl'
-#     shell:
-#         'chainToTbl.py {input} {output}'
         
 rule all_pre_chain:
     input:
@@ -107,7 +107,7 @@ rule lastal:
         min(workflow.cores, 2)
     shell:
         '''
-        /scratch/ngsvin/bin/Last/last-983/src/lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
+        lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
         remove_species_prefix {input.assembly_dir} {output}
         '''
 
@@ -121,7 +121,7 @@ rule lastdb:
     threads:
         min(workflow.cores, 2)
     shell:
-        '/scratch/ngsvin/bin/Last/last-983/src/lastdb -P {threads} -c {params.prefix} {input}'
+        'lastdb -P {threads} -c {params.prefix} {input}'
         
 rule twobit_to_sizes:
     input:
@@ -139,7 +139,7 @@ rule fa_to_twobit:
     shell:
         'faToTwoBit {input} {output}'
     
-rule get_fasta:
+rule get_USCS_fasta:
     output:
         '{fasta_dir}/{species}.fa'
     params:
