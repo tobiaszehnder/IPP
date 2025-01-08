@@ -14,10 +14,13 @@ If you are using IPP, please cite our [preprint](https://www.biorxiv.org/content
 ### Method background
 
 <figure>
-  <img src="figs/IPP.png" alt="IPP method background" width="800">
-  <figcaption><strong>Figure 1.  IPP </strong>  Synteny-based proximity to direct/indirectly aligned regions determines orthology between features (e.g. ATAC-peak summits).</figcaption>
+  <img src="figs/IPP.png" alt="IPP method background" width="600">
+  <figcaption> Mapping of orthologous regions between genomes using either direct (blue) or bridged (orange) projections with IPP. 
+Direct = pairwise alignments between mouse (top) and chicken (bottom). 
+Bridged = pairwise alignments between mouse and chicken to a ‘bridging species’ e.g. human (middle). 
+</figcaption>
 </figure>
-
+<br><br>
 
 For a genomic region with conserved synteny, any non-alignable coordinate can be approximately projected from one genome to another by linear interpolation of its relative position between two alignable anchor points.
 The accuracy of such interpolations negatively correlates with the distance to the anchor points. Therefore, projections between species with large evolutionary distances (e.g. > 200 my) tend to be inaccurate due to a low anchor point density. Including so-called **bridging species** may increase the anchor point density and thus improve projection accuracy.
