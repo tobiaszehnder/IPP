@@ -35,15 +35,16 @@ IPP has also been previously applied [HERE](https://doi.org/10.1038%2Fs41588-022
 
 ## Installation
 1. Download or clone the repository from Github and go to the directory.
-2. Compile the module: `python setup.py build`
-3. Tell python where to look for your module.
+2. Make sure the following modules are installed:
+   `os, sys, numpy, pandas, argparse, tabulate, tqdm, pyranges`
+3. Compile the module: `python setup.py build`
+4. Tell python where to look for your module.
    Use the directory that is created according to your python version, e.g.:
    `export PYTHONPATH=/path/to/your/IPP_directory/build/lib.linux-x86_64-3.10/`
    Check the last folder, it might be different than what is stated here.
    Write the line to your ~/.bashrc or ~/.bash_profile if you want it to be set in every new shell session.
-4. Make sure the following python modules are installed:
-   `os, sys, numpy, pandas, argparse, tabulate, tqdm, pyranges`
 
+Installation should take at most 1-2 minutes on a standard computer (Tested on a workstation with 16GB RAM and 8 cores).
 
 ## Quick start
 Project any regions of interest from one species to another. The following files need to be provided:
@@ -53,8 +54,10 @@ Project any regions of interest from one species to another. The following files
 For example, to project a set of enhancers from mm39 (reference) to galGal6 (target) using 10 cores:
 
 ```bash
-python project.py -o ipp_output/ -n 10 ./enhancers.bed mm39 galGal6 ./mm39.galGal6.pwaln.bin
+python project.py -o ipp_output/ -n 10 ./enhancers.mm39.bed mm39 galGal6 ./mm39.galGal6.pwaln.bin
 ```
+
+Projection with IPP can be done quickly (< 1 minute on single-core) even for input BED file consisting of thousands of genomic regions. 
 
 ## Usage
 Run `python project.py -h` for a detailed description:
@@ -129,9 +132,10 @@ For example, to generate the required `.pwaln` file for a mouse-chicken comparis
 compute_alignments/compute_pairwise_alignments -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
 ```
 
+Computing these large alignment files is time- and resource- consuming. We recommend running the pipeline on a large computing server with multi-core processing. 
 
 ## Output files
-IPP takes the center bp of each input region to project them from the reference to the target genome. After projections for `./enhancers.mm39.` as an example from mm39 to galGal6, IPP returns 4 output files. These are:
+IPP takes the center bp of each input region to project them from the reference to the target genome. After projections for `./enhancers.mm39.bed` as an example from mm39 to galGal6, IPP returns 4 output files. These are:
 
 1. `enhancers.mm39.mm39-galGal6.proj`. This is the main results containing all the relevant information about the projection, i.e. mapped coordinates in target genomes, projection score, classification of conservation based on set threshold, or which bridging species were used. More details of the fields are provided below:
 
