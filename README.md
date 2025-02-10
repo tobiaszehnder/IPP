@@ -103,9 +103,10 @@ In addition to a `.bed` file containing genomic regions of interest from a refer
 We provide a set of precomputed `.pwaln` files for selected comparisons across vertebrate species. The set of bridging species used for these files are the same as those described in our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1). The provided collection includes files for comparisons where mouse (mm39), human(hg38) and chicken (galGal6) serve as the reference genomes. These large files are stored separately from github and can be downloaded [HERE](https://owww.molgen.mpg.de/~IPP/)
 
 ### Generate custom alignments
-We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. 
-   For that, run `compute_alignments/compute_pairwise_alignments`. The script will guide you through the whole alignment process from fasta to chain files. 
-   Make sure all dependencies are installed, including `LAST` and utilities to handling chain files from [UCSC](https://hgdownload.soe.ucsc.edu/admin/exe/): `axtChain`, `chainMergeSort`, and `chainPreNet`. 
+We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. For that, run `compute_alignments/compute_pairwise_alignments`. The script will guide you through the whole alignment process from fasta to chain files. 
+Make sure all dependencies are installed, including `LAST` and utilities to handling chain files from [UCSC](https://hgdownload.soe.ucsc.edu/admin/exe/): `axtChain`, `chainMergeSort`, and `chainPreNet`. 
+
+In the output directory (defined by the `-d` flag), the pipeline will create a predefined folder structures to store relevant inputs like fasta files. The pipeline will try to look for genome fasta files from UCSC from the provided list of species (flag `-s`), but you can of course use your own **custom genomes**. In this case, store these fasta files under `<output_directory_name>/fasta`. 
 
 ```
 Usage: compute_pairwise_alignments -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
