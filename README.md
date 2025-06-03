@@ -3,7 +3,7 @@
 A tool for comparative genomics beyond direct sequence alignments
 
 #### *Citation*
-If you are using IPP, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1)
+If you are using IPP, please cite our [paper](https://www.nature.com/articles/s41588-025-02202-5)
 
 --- 
 
@@ -25,7 +25,7 @@ The accuracy of such interpolations negatively correlates with the distance to t
 The optimal choice and combination of bridging species may vary from one genomic location to another. This presents a shortest path problem in a graph where every node is a species and the weighted edges between nodes represent distances of genomic locations to their anchor points (|x - a|). We established a scoring function that exponentially decreases with increasing distances |x - a|. The shortest path problem is solved using Dijkstra’s Shortest Path Algorithm (Dijkstra, 1959).
 
 ### Applications
-Check out our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1) to see the applications of IPP being fully leveraged and validated as a viable strategy to uncover divergent sequences across distantly related species. This repository provides the source code and input files necessary to run IPP. 
+Check out our [paper](https://www.nature.com/articles/s41588-025-02202-5) to see the applications of IPP being fully leveraged and validated as a viable strategy to uncover divergent sequences across distantly related species. This repository provides the source code and input files necessary to run IPP. 
 
 IPP has also been previously applied [HERE](https://doi.org/10.1038%2Fs41588-022-01089-w) and [HERE](https://doi.org/10.1016/j.cell.2022.09.006)
 
