@@ -299,7 +299,7 @@ static PyType_Slot ippTypeSlots[] = {
 };
 
 static PyType_Spec ippTypeSpec = {
-    "ipp.Ipp",                     /* name */
+    "ipp_cpp.Ipp",                     /* name */
     sizeof(PyIpp),                 /* basicsize */
     0,                             /* itemsize */
     Py_TPFLAGS_DEFAULT,            /* flags */
@@ -308,7 +308,7 @@ static PyType_Spec ippTypeSpec = {
 
 static struct PyModuleDef ippModule = {
     PyModuleDef_HEAD_INIT,
-    "ipp",                         /* m_name */
+    "ipp_cpp",                         /* m_name */
     nullptr,                       /* m_doc */
     0                              /* m_size */
 };
@@ -322,7 +322,7 @@ static PyStructSequence_Field ippAnchorFields[] = {
     {nullptr, nullptr}             /* Sentinel */
 };
 static PyStructSequence_Desc ippAnchorTypeDesc = {
-    "ipp.Anchor",                  /* name */
+    "ipp_cpp.Anchor",                  /* name */
     nullptr,                       /* doc */
     ippAnchorFields,               /* fields */
     (sizeof(ippAnchorFields)/sizeof(ippAnchorFields[0]) - 1) /* n_in_sequence */
@@ -335,7 +335,7 @@ static PyStructSequence_Field ippCoordsFields[] = {
     {nullptr, nullptr}             /* Sentinel */
 };
 static PyStructSequence_Desc ippCoordsTypeDesc = {
-    "ipp.Coords",                  /* name */
+    "ipp_cpp.Coords",                  /* name */
     nullptr,                       /* doc */
     ippCoordsFields,               /* fields */
     (sizeof(ippCoordsFields)/sizeof(ippCoordsFields[0]) - 1) /* n_in_sequence */
@@ -358,14 +358,14 @@ static PyStructSequence_Field ippShortestPathEntryFields[] = {
     {nullptr, nullptr}             /* Sentinel */
 };
 static PyStructSequence_Desc ippShortestPathEntryTypeDesc = {
-    "ipp.ShortestPathEntry",       /* name */
+    "ipp_cpp.ShortestPathEntry",       /* name */
     nullptr,                       /* doc */
     ippShortestPathEntryFields,    /* fields */
     (sizeof(ippShortestPathEntryFields)/sizeof(ippShortestPathEntryFields[0]) - 1) /* n_in_sequence */
 };
 
 PyMODINIT_FUNC
-PyInit_ipp(void) {
+PyInit_ipp_cpp(void) {
     class RefAnchor {
         // Anchor that decrements all registered objects upon destruction.
     public:

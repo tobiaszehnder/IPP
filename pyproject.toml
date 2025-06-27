@@ -8,11 +8,13 @@ description = "Interspecies Point Projection - A tool for comparative genomics b
 version = "0.1.0"
 dependencies = [
     "numpy",
- "pandas",
- "tabulate",
- "tqdm",
- "pyranges",
- "setuptools<81",
+    "pandas",
+    "tabulate",
+    "tqdm",
+    "pyranges",
+    "setuptools<81",
+    "pip>=25.1.1",
+    "ipykernel>=6.29.5",
 ]
 
 [tool.uv]

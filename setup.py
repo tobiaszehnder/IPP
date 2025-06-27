@@ -8,7 +8,7 @@ if os.environ.get("IPP_DEBUG"):
     extra_compile_args.append('-O0')
 
 ipp_extension = Extension(
-    'ipp',
+    'ipp_cpp',
     sources=[
         'cpp/src/ippmodule.cpp',
         'cpp/src/ipp.cpp'

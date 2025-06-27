@@ -1,12 +1,10 @@
 # Python packaging artifacts
 src/*.egg-info/
-
-# Distribution / packaging
+*__pycache__/
 build/
 dist/
+src/*.so
+*.so*
 
-# Python bytecode
-ipp.cpython-*.so*
-
-# Cython build artifacts
-*__pycache__/
+# Large data files
+data/*bin

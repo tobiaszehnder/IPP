@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
-import ipp
+import ipp_cpp
 import numpy as np
 import os
 import pandas as pd
@@ -135,14 +135,14 @@ def main():
     #input("about to init ipp")
     log("Loading pairwise alignments")
     half_life_distance = 10000
-    myIpp = ipp.Ipp()
-    myIpp.load_pwalns(args.path_pwaln)
-    myIpp.set_half_life_distance(half_life_distance)
+    ipp = ipp_cpp.Ipp()
+    ipp.load_pwalns(args.path_pwaln)
+    ipp.set_half_life_distance(half_life_distance)
 
     # compute score thresholds if distance thresholds were passed
     # score = 0.5^{minDist * genomeSizeBasis / (genomeSize * halfLifeDistance_)}
     genome_size_basis = 2728222451 # mouse mm39 genome size
-    genome_size_ref = myIpp.get_genome_size(args.ref)
+    genome_size_ref = ipp.get_genome_size(args.ref)
     score_DC = args.score_DC
     score_IC = args.score_IC
     if args.distance_DC is not None:
@@ -244,11 +244,13 @@ def main():
   
     # Start the projection
     log('Projecting regions from %s to %s' %(args.ref, args.qry))
-    myIpp.project_coords(args.ref,
-                         args.qry,
-                         ref_coords,
-                         args.n_cores,
-                         on_job_done_callback)
+    ipp.project_coords(
+        args.ref,
+        args.qry,
+        ref_coords,
+        args.n_cores,
+        on_job_done_callback
+    )
     pbar.close()
 
     # create data frame from results dict
