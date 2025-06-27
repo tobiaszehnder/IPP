@@ -1,0 +1,12 @@
+# Python packaging artifacts
+src/*.egg-info/
+
+# Distribution / packaging
+build/
+dist/
+
+# Python bytecode
+ipp.cpython-*.so*
+
+# Cython build artifacts
+*__pycache__/

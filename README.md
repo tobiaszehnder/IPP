@@ -4,10 +4,11 @@ A tool for comparative genomics beyond direct sequence alignments
 
 #### *Author*
 - [Tobias Zehnder](https://github.com/tobiaszehnder)
+
 #### *Citation*
 If you are using IPP, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1)
 
---- 
+---
 
 ## Introduction
 
@@ -31,33 +32,48 @@ Check out our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.5900
 
 IPP has also been previously applied [HERE](https://doi.org/10.1038%2Fs41588-022-01089-w) and [HERE](https://doi.org/10.1016/j.cell.2022.09.006)
 
---- 
+---
 
 ## Installation
-1. Download or clone the repository from Github and go to the directory.
-2. Make sure the following modules are installed:
-   `os, sys, numpy, pandas, argparse, tabulate, tqdm, pyranges`
-3. Compile the module: `python setup.py build`
-4. Tell python where to look for your module.
-   Use the directory that is created according to your python version, e.g.:
-   `export PYTHONPATH=/path/to/your/IPP_directory/build/lib.linux-x86_64-3.10/`
-   Check the last folder, it might be different than what is stated here.
-   Write the line to your ~/.bashrc or ~/.bash_profile if you want it to be set in every new shell session.
 
-Installation should take at most 1-2 minutes on a standard computer (Tested on a workstation with 16GB RAM and 8 cores).
+We now support reproducible environment management via [`uv`](https://github.com/astral-sh/uv), which is used for dependency resolution and virtual environment handling.
 
-## Quick start
-Project any regions of interest from one species to another. The following files need to be provided:
-1. `regions.bed` - A BED file containing the regions of interest in the first species
-2. `pwaln file generated for the species pair` - A binarized collection of pairwise alignments between the reference, target, and all bridging species. We describe below how to obtain this.
-
-For example, to project a set of enhancers from mm39 (reference) to galGal6 (target) using 10 cores:
+To install:
 
 ```bash
-python project.py -o ipp_output/ -n 10 ./enhancers.mm39.bed mm39 galGal6 ./mm39.galGal6.pwaln.bin
+# Clone the repo
+git clone https://github.com/tobiaszehnder/IPP.git
+cd IPP
+
+# Sync the environment
+uv sync
+
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
-Projection with IPP can be done quickly (< 1 minute on single-core) even for input BED file consisting of thousands of genomic regions. 
+This will automatically install all required Python packages and set up a virtual environment in `.venv`.
+
+> Alternatively, you can install the required dependencies manually (not recommended):
+> `pip install numpy pandas argparse tabulate tqdm pyranges`
+
+---
+
+## Quick start
+
+To project any genomic regions of interest from one species to another, you'll need:
+
+1. `regions.bed` — BED file of regions in the reference species
+2. `.pwaln` file — a binary file with the pairwise alignments between reference, target, and bridging species
+
+Example usage:
+
+```bash
+python src/ipp/project.py -o ipp_output/ -n 10 ./enhancers.mm39.bed mm39 galGal6 ./mm39.galGal6.pwaln.bin
+```
+
+---
+
 
 ## Usage
 Run `python project.py -h` for a detailed description:
@@ -96,11 +112,14 @@ optional arguments:
   -a, --include_anchors Include anchors in results table (default: False)
 ```
 
+---
 
 ## Required Input
 
 In addition to a `.bed` file containing genomic regions of interest from a reference species (e.g. mm39), the other required input for IPP is a `.pwaln` file, which is a binarized collection of pairwise alignments between the reference, target, and all bridging species.
 We provide a set of precomputed `.pwaln` files for selected comparisons across vertebrate species. The set of bridging species used for these files are the same as those described in our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1). The provided collection includes files for comparisons where mouse (mm39), human(hg38) and chicken (galGal6) serve as the reference genomes. These large files are stored separately from github and can be downloaded [HERE](https://owww.molgen.mpg.de/~IPP/)
+
+---
 
 ### Generate custom alignments
 We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. For that, run `compute_alignments/compute_pairwise_alignments`. The script will guide you through the whole alignment process from fasta to chain files. 
