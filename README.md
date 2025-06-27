@@ -28,7 +28,7 @@ The accuracy of such interpolations negatively correlates with the distance to t
 The optimal choice and combination of bridging species may vary from one genomic location to another. This presents a shortest path problem in a graph where every node is a species and the weighted edges between nodes represent distances of genomic locations to their anchor points (|x - a|). We established a scoring function that exponentially decreases with increasing distances |x - a|. The shortest path problem is solved using Dijkstra’s Shortest Path Algorithm (Dijkstra, 1959).
 
 ### Applications
-Check out our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1) to see the applications of IPP being fully leveraged and validated as a viable strategy to uncover divergent sequences across distantly related species. This repository provides the source code and input files necessary to run IPP. 
+Check out our [paper](https://www.nature.com/articles/s41588-025-02202-5) to see the applications of IPP being fully leveraged and validated as a viable strategy to uncover divergent sequences across distantly related species. This repository provides the source code and input files necessary to run IPP. 
 
 IPP has also been previously applied [HERE](https://doi.org/10.1038%2Fs41588-022-01089-w) and [HERE](https://doi.org/10.1016/j.cell.2022.09.006)
 
@@ -76,7 +76,7 @@ python src/ipp/project.py -o ipp_output/ -n 10 ./enhancers.mm39.bed mm39 galGal6
 
 
 ## Usage
-Run `python project.py -h` for a detailed description:
+Run `python src/ipp/project.py -h` for a detailed description:
 
 ```
 positional arguments:
@@ -117,18 +117,18 @@ optional arguments:
 ## Required Input
 
 In addition to a `.bed` file containing genomic regions of interest from a reference species (e.g. mm39), the other required input for IPP is a `.pwaln` file, which is a binarized collection of pairwise alignments between the reference, target, and all bridging species.
-We provide a set of precomputed `.pwaln` files for selected comparisons across vertebrate species. The set of bridging species used for these files are the same as those described in our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1). The provided collection includes files for comparisons where mouse (mm39), human(hg38) and chicken (galGal6) serve as the reference genomes. These large files are stored separately from github and can be downloaded [HERE](https://owww.molgen.mpg.de/~IPP/)
+We provide a set of precomputed `.pwaln` files for selected comparisons across vertebrate species. The set of bridging species used for these files are the same as those described in our [paper](https://www.nature.com/articles/s41588-025-02202-5). The provided collection includes files for comparisons where mouse (mm39), human(hg38) and chicken (galGal6) serve as the reference genomes. These large files are stored separately from github and can be downloaded [HERE](https://owww.molgen.mpg.de/~IPP/)
 
 ---
 
 ### Generate custom alignments
-We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. For that, run `compute_alignments/compute_pairwise_alignments`. The script will guide you through the whole alignment process from fasta to chain files. 
+We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. For that, run `compute_alignments/compute_pairwise_alignments.sh`. The script will guide you through the whole alignment process from fasta to chain files. 
 Make sure all dependencies are installed, including `LAST` and utilities to handling chain files from [UCSC](https://hgdownload.soe.ucsc.edu/admin/exe/): `axtChain`, `chainMergeSort`, and `chainPreNet`. 
 
 In the output directory (defined by the `-d` flag), the pipeline will create a predefined folder structures to store relevant inputs like fasta files. The pipeline will try to look for genome fasta files from UCSC from the provided list of species (flag `-s`), but you can of course use your own **custom genomes**. In this case, store these fasta files under `<output_directory_name>/fasta`. 
 
 ```
-Usage: compute_pairwise_alignments -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
+Usage: compute_alignments/compute_pairwise_alignments.sh -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
 
 required (one or the other):
   -s SPECIES      Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
@@ -149,7 +149,7 @@ With these, you can create the final collection of pairwise alignments `.pwaln` 
 For example, to generate the required `.pwaln` file for a mouse-chicken comparison using our seletected bridging species (provided as a text file `species_ipp.txt') using 10 cores:
 
 ```bash
-compute_alignments/compute_pairwise_alignments -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
+compute_alignments/compute_pairwise_alignments.sh -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
 ```
 
 Computing these large alignment files is time- and resource- consuming. We recommend running the pipeline on a large computing server with multi-core processing. 
