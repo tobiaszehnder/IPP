@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: IPP
+Version: 0.1.0
+Summary: Interspecies Point Projection - A tool for comparative genomics beyond direct sequence alignments
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: tabulate
+Requires-Dist: tqdm
+Requires-Dist: pyranges

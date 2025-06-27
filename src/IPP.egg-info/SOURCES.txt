@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+setup.py
+cpp/src/ipp.cpp
+cpp/src/ippmodule.cpp
+src/IPP.egg-info/PKG-INFO
+src/IPP.egg-info/SOURCES.txt
+src/IPP.egg-info/dependency_links.txt
+src/IPP.egg-info/requires.txt
+src/IPP.egg-info/top_level.txt
+src/ipp/__init__.py
+src/ipp/project.py

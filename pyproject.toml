@@ -1,3 +1,29 @@
 [build-system]
 requires = ["setuptools", "wheel", "numpy"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "IPP"
+description = "Interspecies Point Projection - A tool for comparative genomics beyond direct sequence alignments"
+version = "0.1.0"
+dependencies = ["numpy", "pandas", "tabulate", "tqdm", "pyranges"]
+
+[tool.uv]
+default-groups = ["dev", "docs", "tests"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "pre-commit",
+]
+
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+]
+
+tests = [
+    "pytest-cov",
+]
