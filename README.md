@@ -6,7 +6,7 @@ A tool for comparative genomics beyond direct sequence alignments
 - [Tobias Zehnder](https://github.com/tobiaszehnder)
 
 #### *Citation*
-If you are using IPP, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2024.05.13.590087v1)
+If you are using IPP, please cite our [paper](https://www.nature.com/articles/s41588-025-02202-5)
 
 ---
 
