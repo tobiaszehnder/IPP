@@ -6,7 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "IPP"
 description = "Interspecies Point Projection - A tool for comparative genomics beyond direct sequence alignments"
 version = "0.1.0"
-dependencies = ["numpy", "pandas", "tabulate", "tqdm", "pyranges"]
+dependencies = [
+    "numpy",
+ "pandas",
+ "tabulate",
+ "tqdm",
+ "pyranges",
+ "setuptools<81",
+]
 
 [tool.uv]
 default-groups = ["dev", "docs", "tests"]

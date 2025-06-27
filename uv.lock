@@ -277,6 +277,7 @@ dependencies = [
     { name = "numpy", version = "2.3.1", source = { registry = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
     { name = "pyranges" },
+    { name = "setuptools" },
     { name = "tabulate" },
     { name = "tqdm" },
 ]
@@ -301,6 +302,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyranges" },
+    { name = "setuptools", specifier = "<81" },
     { name = "tabulate" },
     { name = "tqdm" },
 ]
@@ -989,6 +991,15 @@ wheels = [
     { url = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/ruff/0.12.1/ruff-0.12.1-py3-none-win32.whl", hash = "sha256:d973fa626d4c8267848755bd0414211a456e99e125dcab147f24daa9e991a245" },
     { url = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/ruff/0.12.1/ruff-0.12.1-py3-none-win_amd64.whl", hash = "sha256:9e1123b1c033f77bd2590e4c1fe7e8ea72ef990a85d2484351d408224d603013" },
     { url = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/ruff/0.12.1/ruff-0.12.1-py3-none-win_arm64.whl", hash = "sha256:78ad09a022c64c13cc6077707f036bab0fac8cd7088772dcd1e5be21c5002efc" },
+]
+
+[[package]]
+name = "setuptools"
+version = "80.9.0"
+source = { registry = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/" }
+sdist = { url = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/setuptools/80.9.0/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c" }
+wheels = [
+    { url = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/setuptools/80.9.0/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922" },
 ]
 
 [[package]]
