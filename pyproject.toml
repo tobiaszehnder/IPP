@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "IPP"
 description = "Interspecies Point Projection - A tool for comparative genomics beyond direct sequence alignments"
 version = "0.1.0"
+requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "pandas",
@@ -36,3 +37,53 @@ docs = [
 tests = [
     "pytest-cov",
 ]
+
+[tool.ruff]
+src = ["src"]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+lint.ignore = [
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex function (you might keep or remove based on preference)
+]
+lint.select = [
+    "E", # pycodestyle errors (including line length E501)
+    "W", # pycodestyle warnings
+    "F", # pyflakes errors
+    "I", # isort (import sorting)
+    "C", # flake8-comprehensions
+    "B", # flake8-bugbear
+]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+lines-after-imports = 2
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true

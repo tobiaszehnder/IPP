@@ -1,0 +1,24 @@
+---
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: "v3.0.0-alpha.6"
+    hooks:
+      - id: prettier
+        name: 💄 Ensuring files are prettier
+        types: [yaml, json, markdown]
+
+  - repo: local
+    hooks:
+      - id: ruff-fmt
+        name: ☕️ Format using ruff
+        language: system
+        types: [python]
+        files: ^(src|tests)/.*\.py$
+        entry: uv run ruff format
+
+      - id: ruff-lint
+        name: 🧪 Lint using ruff
+        language: system
+        types: [python]
+        files: ^(src|tests)/.*\.py$
+        entry: uv run ruff check --fix

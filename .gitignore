@@ -8,3 +8,6 @@ src/*.so
 
 # Large data files
 data/*bin
+
+# pip configuration
+pip.conf
