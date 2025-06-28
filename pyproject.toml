@@ -14,7 +14,6 @@ dependencies = [
     "tqdm",
     "pyranges",
     "setuptools<81",
-    "pip>=25.1.1",
     "ipykernel>=6.29.5",
 ]
 
@@ -27,6 +26,7 @@ dev = [
     "ruff",
     "mypy",
     "pre-commit",
+    "pip>=25.1.1",
 ]
 
 docs = [

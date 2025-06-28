@@ -407,7 +407,6 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.1", source = { registry = "https://abstra-058264397262.d.codeartifact.eu-west-1.amazonaws.com/pypi/owkin-pypi/simple/" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
-    { name = "pip" },
     { name = "pyranges" },
     { name = "setuptools" },
     { name = "tabulate" },
@@ -417,6 +416,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "pip" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "ruff" },
@@ -434,7 +434,6 @@ requires-dist = [
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "numpy" },
     { name = "pandas" },
-    { name = "pip", specifier = ">=25.1.1" },
     { name = "pyranges" },
     { name = "setuptools", specifier = "<81" },
     { name = "tabulate" },
@@ -444,6 +443,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy" },
+    { name = "pip", specifier = ">=25.1.1" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "ruff" },
