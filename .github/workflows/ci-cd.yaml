@@ -44,7 +44,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Build C++ extension
-        run: python setup.py build_ext --inplace
+        run: uv run python setup.py build_ext --inplace
 
       - name: Run pre-commit hooks
         run: uv run pre-commit run --all-files
