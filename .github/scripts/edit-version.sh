@@ -8,5 +8,5 @@ if [[ $# -ne 1 ]]; then
 fi
 
 echo "Updating version to: $1"
-sed -i "s/^__version__ = .*/__version__ = \"$1\"/" ./ipp/__init__.py
+sed -i "s/^__version__ = .*/__version__ = \"$1\"/" ./src/ipp/__init__.py
 echo "Version updated successfully to $1 in __init__.py."
