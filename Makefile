@@ -25,7 +25,7 @@ lint:
 
 # Run tests
 tests:
-	if [ "$(MAKECMDGOALS)" != "tests" ]; then \
+	@if [ "$(MAKECMDGOALS)" != "tests" ]; then \
 		uv run pytest $(MAKECMDGOALS) -s -vv; \
 	else \
 		uv run pytest tests/ -s -vv; \
