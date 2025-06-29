@@ -43,9 +43,11 @@ jobs:
       - name: Install project dependencies
         run: uv sync --all-extras
 
+      - name: Build C++ extension
+        run: python setup.py build_ext --inplace
+
       - name: Run pre-commit hooks
         run: uv run pre-commit run --all-files
 
       - name: Run tests
         run: uv run pytest
-  
