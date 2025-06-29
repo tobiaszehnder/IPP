@@ -3,7 +3,6 @@ src/*.egg-info/
 *__pycache__/
 build/
 dist/
-src/*.so
 *.so*
 
 # Large data files
