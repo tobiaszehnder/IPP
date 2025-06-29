@@ -1,0 +1,53 @@
+name: ci-cd
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ci-cd.yaml
+      - ipp/**
+      - tests/**
+  release:
+    types:
+      - published
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Install project dependencies
+        run: uv sync --all-extras
+
+      - name: Build C++ extension
+        run: uv run python setup.py build_ext --inplace
+
+      - name: Run pre-commit hooks
+        run: uv run pre-commit run --all-files
+
+      - name: Run tests
+        run: uv run pytest
