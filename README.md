@@ -45,11 +45,8 @@ To install:
 git clone https://github.com/tobiaszehnder/IPP.git
 cd IPP
 
-# Sync the environment
-uv sync
-
-# Activate the virtual environment
-source .venv/bin/activate
+# Sync and activate the environment and build extension
+make sync-build
 ```
 
 This will automatically install all required Python packages and set up a virtual environment in `.venv`.
@@ -69,14 +66,14 @@ To project any genomic regions of interest from one species to another, you'll n
 Example usage:
 
 ```bash
-python src/ipp/project.py -o ipp_output/ -n 10 ./enhancers.mm39.bed mm39 galGal6 ./mm39.galGal6.pwaln.bin
+uv run python src/ipp/project.py -o ipp_output/ -n 10 ./enhancers.mm39.bed mm39 galGal6 ./mm39.galGal6.pwaln.bin
 ```
 
 ---
 
 
 ## Usage
-Run `python src/ipp/project.py -h` for a detailed description:
+Run `uv run python src/ipp/project.py -h` for a detailed description:
 
 ```
 positional arguments:
