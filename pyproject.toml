@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [tool.uv]
-default-groups = ["dev", "docs", "tests"]
+default-groups = ["dev", "tests"]
 
 [dependency-groups]
 dev = [
@@ -27,11 +27,6 @@ dev = [
     "mypy",
     "pre-commit",
     "pip>=25.1.1",
-]
-
-docs = [
-    "mkdocs",
-    "mkdocs-material",
 ]
 
 tests = [
