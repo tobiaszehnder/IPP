@@ -24,7 +24,6 @@ default-groups = ["dev", "tests"]
 dev = [
     "pytest",
     "ruff",
-    "mypy",
     "pre-commit",
     "pip>=25.1.1",
 ]
