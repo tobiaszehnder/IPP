@@ -41,7 +41,7 @@ jobs:
         run: uv python install ${{ matrix.python }}
 
       - name: Install project dependencies
-        run: uv sync --all-extras --no-group docs
+        run: uv sync --all-extras
 
       - name: Run pre-commit hooks
         run: uv run pre-commit run --all-files
