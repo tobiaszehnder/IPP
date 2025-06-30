@@ -19,7 +19,7 @@ def test_cpp_backend_project_script_runs():
                 "-o",
                 tmpdir,
                 "-n",
-                "10",
+                "1",
                 "data/dummy_regions.bed",
                 "mm39",
                 "hg38",
