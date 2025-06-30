@@ -2,6 +2,9 @@
 
 A tool for comparative genomics beyond direct sequence alignments
 
+#### *Author*
+- [Tobias Zehnder](https://github.com/tobiaszehnder)
+
 #### *Citation*
 If you are using IPP, please cite our [paper](https://www.nature.com/articles/s41588-025-02202-5)
 
