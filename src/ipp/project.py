@@ -311,7 +311,7 @@ def main():
             name = cols[3]
             refChrom = cols[0]
             refLoc = int(np.mean([int(cols[1]), int(cols[2])]))
-            coords = ipp.Coords((refChrom, refLoc))
+            coords = ipp_cpp.Coords((refChrom, refLoc))
             ref_coords.append(coords)
             # add the name of the region to a dict with refChrom:refLoc as the key
             # for later translation
@@ -335,17 +335,17 @@ def main():
 
         Parameters
         ----------
-        ref_coord : ipp.Coords
+        ref_coord : ipp_cpp.Coords
             Reference coordinate as (chromosome, location).
         direct_score : float
             Direct projection score between 0 and 1.
-        direct_coords : ipp.Coords
+        direct_coords : ipp_cpp.Coords
             Direct mapped coordinates (query chromosome, location).
-        direct_up_anchor : ipp.Anchor or None
+        direct_up_anchor : ipp_cpp.Anchor or None
             Upstream anchor defining reference and query start/end positions.
-        direct_down_anchor : ipp.Anchor or None
+        direct_down_anchor : ipp_cpp.Anchor or None
             Downstream anchor defining reference and query start/end positions.
-        multi_shortest_path : list of ipp.ShortestPathEntry
+        multi_shortest_path : list of ipp_cpp.ShortestPathEntry
             Multi-species shortest path from reference to query,
             each entry contains species name, score, coordinates,
             and upstream/downstream anchors.
