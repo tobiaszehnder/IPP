@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/tobiaszehnder/IPP/compare/v1.0.1...v1.0.2) (2025-06-30)
+
+
+### Bug Fixes
+
+* module rename ([67843a9](https://github.com/tobiaszehnder/IPP/commit/67843a9dc46e882a292e84c6f6c805d94d5e2503))
+
 ## [1.0.1](https://github.com/tobiaszehnder/IPP/compare/v1.0.0...v1.0.1) (2025-06-29)
 
 
