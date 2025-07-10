@@ -197,3 +197,10 @@ chr1    3984056 3984057 peak_2_chr2:110692900_NC        0.643   .       3984056 
 ```
 
 4. `enhancers.mm39.mm39-galGal6.unmapped`. a list of regions where projections were not possible.
+
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+© 2025 Tobias Zehnder
