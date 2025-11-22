@@ -1,0 +1,4 @@
+# Small Drosophila genomes for testing (all available on UCSC)
+dm6         # Drosophila melanogaster Release 6 (~140 MB)
+dm3         # Drosophila melanogaster Release 3 (~120 MB) 
+droSim1     # Drosophila simulans (~140 MB)

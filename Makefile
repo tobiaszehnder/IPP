@@ -1,4 +1,4 @@
-.PHONY: checks fmt lint type tests
+.PHONY: checks fmt lint type tests test-alignments
 
 # Synchronize environment and build extension
 sync-build: uv-sync build-ext
@@ -9,7 +9,7 @@ uv-sync:
 
 # Build the C++ extension module
 build-ext:
-	python setup.py build_ext --inplace
+	uv run python setup.py build_ext --inplace
 
 # Run pre-commit checks
 checks:
@@ -30,3 +30,8 @@ tests:
 	else \
 		uv run pytest tests/ -s -vv; \
 	fi
+
+# Run end-to-end alignment pipeline test
+# Usage: make test-alignments NTHREADS=1 MAX_MEMORY_GB=4
+test-alignments:
+	@bash tests/test_alignments.sh
