@@ -32,7 +32,7 @@ force="none"
 nthreads="--cores 1"
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # directory of this script
 snakefile="$script_dir/Snakefile"
-snakemake_args="-pr --rerun-incomplete"
+snakemake_args="-p --rerun-incomplete"
 while getopts ":s:t:cr:q:d:f:@:!:n" OPTION; do
  	case $OPTION in
 		s) species=$OPTARG ;;
@@ -40,7 +40,7 @@ while getopts ":s:t:cr:q:d:f:@:!:n" OPTION; do
 		c) create_pwaln_collection=True ;;
 		r) ref=$OPTARG ;;
 		q) qry=$OPTARG ;;
-		d) data_dir=$(realpath $OPTARG) ;;
+		d) mkdir -p "$OPTARG" 2>/dev/null; data_dir=$(realpath "$OPTARG" 2>/dev/null || echo "$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG")") ;;
 		f) force=$OPTARG ;;
 		@) nthreads="--cores $OPTARG" ;;
 		n) nthreads="$nthreads -n" ;;

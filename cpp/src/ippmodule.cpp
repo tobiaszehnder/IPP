@@ -203,7 +203,7 @@ ippProjectCoords(PyIpp* self, PyObject* args) {
         PyObject* const argList(Py_BuildValue(
                 "OdOOOO",
                 createPyCoords(refChromName, refChromLoc),
-                hasDirect ? coordProjection.direct->score : 0.0d,
+                hasDirect ? coordProjection.direct->score : 0.0,
                 hasDirect ? createPyCoords2(coordProjection.direct->nextCoords) : Py_None,
                 hasDirect ? createPyAnchor(coordProjection.direct->anchors.upstream) : Py_None,
                 hasDirect ? createPyAnchor(coordProjection.direct->anchors.downstream) : Py_None,

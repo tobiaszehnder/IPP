@@ -120,7 +120,59 @@ We provide a set of precomputed `.pwaln` files for selected comparisons across v
 
 ### Generate custom alignments
 We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. For that, run `compute_alignments/compute_pairwise_alignments.sh`. The script will guide you through the whole alignment process from fasta to chain files. 
-Make sure all dependencies are installed, including `LAST` and utilities to handling chain files from [UCSC](https://hgdownload.soe.ucsc.edu/admin/exe/): `axtChain`, `chainMergeSort`, and `chainPreNet`. 
+
+#### Installing alignment pipeline dependencies
+
+The alignment pipeline requires several external command-line tools that must be installed separately:
+
+**Required tools:**
+- **LAST alignment tools** (`lastal`, `lastdb`, `maf-convert`): Download from [LAST website](http://last.cbrc.jp/) or install via package manager
+- **UCSC tools** (`axtChain`, `chainMergeSort`, `chainPreNet`, `faToTwoBit`, `twoBitInfo`): Download from [UCSC downloads](https://hgdownload.soe.ucsc.edu/admin/exe/) or install via package manager
+- **GNU parallel** (provides `sem` command): Install via package manager
+- **wget**: Usually pre-installed on Linux, install via package manager if needed
+
+**Installation examples:**
+
+- **macOS (Homebrew):**
+  ```bash
+  brew install parallel wget
+  # LAST and UCSC tools are not available via Homebrew - install manually (see below)
+  ```
+
+- **Linux (apt):**
+  ```bash
+  sudo apt-get install last-align ucsc-tools parallel wget
+  ```
+
+- **Linux (yum/dnf):**
+  ```bash
+  sudo yum install last-align ucsc-tools parallel wget
+  ```
+
+- **Manual installation:**
+  - **LAST**: Clone from GitLab and build from source:
+    ```bash
+    git clone https://gitlab.com/mcfrith/last.git
+    cd last
+    make
+    # Add the 'bin' directory to your PATH or copy binaries
+    export PATH="$PATH:$(pwd)/bin"
+    # Or copy to system directory:
+    # sudo cp bin/lastal bin/lastdb bin/maf-convert /usr/local/bin/
+    ```
+  - **UCSC tools**: Download from https://hgdownload.soe.ucsc.edu/admin/exe/ and add to PATH. On macOS, download the macOS-specific binaries:
+    ```bash
+    # Download UCSC tools for macOS
+    wget https://hgdownload.soe.ucsc.edu/admin/exe/macOS.x86_64/axtChain
+    wget https://hgdownload.soe.ucsc.edu/admin/exe/macOS.x86_64/chainMergeSort
+    wget https://hgdownload.soe.ucsc.edu/admin/exe/macOS.x86_64/chainPreNet
+    wget https://hgdownload.soe.ucsc.edu/admin/exe/macOS.x86_64/faToTwoBit
+    wget https://hgdownload.soe.ucsc.edu/admin/exe/macOS.x86_64/twoBitInfo
+    chmod +x axtChain chainMergeSort chainPreNet faToTwoBit twoBitInfo
+    # Add to PATH or move to a directory in your PATH
+    ```
+
+Verify installation by running: `make test-alignments` (which checks for all required tools). 
 
 In the output directory (defined by the `-d` flag), the pipeline will create a predefined folder structures to store relevant inputs like fasta files. The pipeline will try to look for genome fasta files from UCSC from the provided list of species (flag `-s`), but you can of course use your own **custom genomes**. In this case, store these fasta files under `<output_directory_name>/fasta`. 
 

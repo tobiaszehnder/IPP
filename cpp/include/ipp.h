@@ -226,6 +226,6 @@ format(char const* fmt, Args&& ...args) {
     auto const len(std::snprintf(nullptr, 0, fmt, std::forward<Args>(args)...));
 
     std::string ret(len+1, '\0');
-    std::sprintf(ret.data(), fmt, std::forward<Args>(args)...);
+    std::snprintf(ret.data(), len+1, fmt, std::forward<Args>(args)...);
     return ret;
 }

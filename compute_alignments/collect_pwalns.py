@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # This script collects a set of given pairwise alignment chain files,
 # converts chromosome names to indices,
