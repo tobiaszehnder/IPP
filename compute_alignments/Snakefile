@@ -1,7 +1,12 @@
 import os, sys
 
 # Get the directory where this Snakefile is located
-snakefile_dir = os.path.dirname(os.path.abspath(__file__))
+# Snakemake sets workflow.basedir to the directory containing the Snakefile
+try:
+    snakefile_dir = workflow.basedir
+except:
+    # Fallback if workflow not available
+    snakefile_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.path.dirname(os.path.abspath('compute_alignments/Snakefile'))
 
 # parse config dict entries to variables, e.g. a = d['a']. (data_dir, species_list)
 data_dir = os.path.abspath('../ipp-data')
@@ -57,7 +62,7 @@ rule collect_and_binarize_pwalns:
         assembly_dir=assembly_dir,
         species_list=','.join(species_list)
     shell:
-        'collect_pwalns.py {params} {output}'
+        'uv run python {workflow.basedir}/collect_pwalns.py {params} {output}'
         
         
 rule all_pre_chain:
@@ -105,14 +110,13 @@ rule lastal:
     output:
         '{maf_dir}/{s1}.{s2}.maf'
     params:
-        lastdb_prefix='%s/{s1}' %lastdb_dir,
-        remove_species_prefix_script=os.path.join(snakefile_dir, 'remove_species_prefix')
+        lastdb_prefix='%s/{s1}' %lastdb_dir
     threads:
         min(workflow.cores, 2)
     shell:
         '''
         lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
-        {params.remove_species_prefix_script} {input.assembly_dir} {output}
+        {workflow.basedir}/remove_species_prefix {input.assembly_dir} {output}
         '''
 
 rule lastdb:

@@ -19,6 +19,7 @@ TEST_OUTPUT_DIR="$REPO_ROOT/test_alignments_output"
 COMPUTE_SCRIPT="$REPO_ROOT/compute_alignments/compute_pairwise_alignments.sh"
 NTHREADS="${NTHREADS:-2}"
 MAX_MEMORY_GB="${MAX_MEMORY_GB:-8}"
+MAX_MEMORY_GB="${MAX_MEMORY_GB:-8}" 
 
 # Required tools
 REQUIRED_TOOLS=(
@@ -91,18 +92,12 @@ fi
 
 print_info "Testing with species: $SPECIES_LIST"
 
-# Verify genome files can be downloaded from UCSC
-print_info "Verifying genome files are available on UCSC..."
+# Parse species array
 SPECIES_ARRAY=($(echo "$SPECIES_LIST" | tr ',' ' '))
-for species in "${SPECIES_ARRAY[@]}"; do
-    UCSC_URL="http://hgdownload.cse.ucsc.edu/goldenpath/${species}/bigZips/${species}.fa.gz"
-    print_info "Checking: $UCSC_URL"
-    if curl -s -f -I "$UCSC_URL" > /dev/null 2>&1; then
-        print_info "✓ $species is available on UCSC"
-    else
-        print_warn "✗ $species may not be available on UCSC (will try anyway)"
-    fi
-done
+
+# Note: Using dummy fasta files for fast testing (created below)
+# Skip UCSC verification since we're not downloading real genomes
+print_info "Using dummy fasta files for fast testing (skipping UCSC download)"
 
 # Set resource limits
 print_info "Setting resource limits..."
@@ -126,6 +121,62 @@ if [ -d "$TEST_OUTPUT_DIR" ]; then
     print_warn "Removing existing test output directory: $TEST_OUTPUT_DIR"
     rm -rf "$TEST_OUTPUT_DIR"
 fi
+
+# Create dummy fasta files for fast testing
+create_dummy_fastas() {
+    print_info "Creating dummy fasta files for fast testing..."
+    FASTA_DIR="$TEST_OUTPUT_DIR/fasta"
+    ASSEMBLY_DIR="$TEST_OUTPUT_DIR/assembly"
+    mkdir -p "$FASTA_DIR" "$ASSEMBLY_DIR"
+    
+    # Create a base sequence that will be shared/modified across species
+    # This ensures sequences are alignable
+    BASE_SEQ=$(python3 -c "import random; random.seed(42); print(''.join(random.choices('ATCG', k=1000)))")
+    
+    for i in "${!SPECIES_ARRAY[@]}"; do
+        species="${SPECIES_ARRAY[$i]}"
+        DUMMY_FASTA="$FASTA_DIR/${species}.fa"
+        
+        # Create sequences with ~80% similarity to base sequence (mutations)
+        # This ensures they will align but with some differences
+        python3 <<PYTHON > "$DUMMY_FASTA"
+import random
+random.seed(42 + $i)  # Different seed per species
+
+base_seq = "$BASE_SEQ"
+
+def mutate_sequence(seq, mutation_rate=0.2):
+    """Mutate sequence with given mutation rate"""
+    result = list(seq)
+    for i in range(len(result)):
+        if random.random() < mutation_rate:
+            # Mutate to a different base
+            bases = ['A', 'T', 'C', 'G']
+            bases.remove(result[i])
+            result[i] = random.choice(bases)
+    return ''.join(result)
+
+# Create two chromosomes with shared similarity
+chr1 = mutate_sequence(base_seq, 0.15)  # 85% similarity
+chr2 = mutate_sequence(base_seq, 0.20)  # 80% similarity
+
+print(">chr1")
+print(chr1)
+print(">chr2")
+print(chr2)
+PYTHON
+        
+        # Create corresponding .sizes file (needed by pipeline)
+        SIZES_FILE="$ASSEMBLY_DIR/${species}.sizes"
+        cat > "$SIZES_FILE" <<EOF
+chr1	1000
+chr2	1000
+EOF
+        print_info "  Created: $DUMMY_FASTA ($(wc -c < "$DUMMY_FASTA" | xargs) bytes)"
+    done
+}
+
+create_dummy_fastas
 
 # Run the alignment pipeline
 print_info "Running alignment pipeline..."
