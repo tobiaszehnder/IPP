@@ -1,5 +1,8 @@
 import os, sys
 
+# Get the directory where this Snakefile is located
+snakefile_dir = os.path.dirname(os.path.abspath(__file__))
+
 # parse config dict entries to variables, e.g. a = d['a']. (data_dir, species_list)
 data_dir = os.path.abspath('../ipp-data')
 for k,v in config.items():
@@ -102,13 +105,14 @@ rule lastal:
     output:
         '{maf_dir}/{s1}.{s2}.maf'
     params:
-        lastdb_prefix='%s/{s1}' %lastdb_dir
+        lastdb_prefix='%s/{s1}' %lastdb_dir,
+        remove_species_prefix_script=os.path.join(snakefile_dir, 'remove_species_prefix')
     threads:
         min(workflow.cores, 2)
     shell:
         '''
         lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
-        remove_species_prefix {input.assembly_dir} {output}
+        {params.remove_species_prefix_script} {input.assembly_dir} {output}
         '''
 
 rule lastdb:
