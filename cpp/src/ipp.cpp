@@ -222,9 +222,9 @@ Ipp::projectionScore(uint32_t loc,
     // score = 0.5^{minDist * genomeSizeBasis / (genomeSize * halfLifeDistance_)}
 
     uint32_t const minDist(std::min(loc - upBound, downBound - loc));
-    double const exp(((1.0d*minDist) / halfLifeDistance_)
-                     * ((1.0d*genomeSizeBasis) / genomeSize));
-    double const score(std::pow(0.5d, exp));
+    double const exp(((1.0*minDist) / halfLifeDistance_)
+                     * ((1.0*genomeSizeBasis) / genomeSize));
+    double const score(std::pow(0.5, exp));
     assert(0 <= score && score <= 1);
     return score;
 }
@@ -645,7 +645,7 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
                                   ? qryUpBound + (refLoc - refUpBound)
                                   : qryUpBound - (refLoc - refUpBound));
 
-            ret.emplace_back(1.0d,
+            ret.emplace_back(1.0,
                              Coords(anchors.upstream.qryChrom(), qryLoc),
                              anchors);
         }
@@ -682,7 +682,7 @@ Ipp::projectGenomicLocation(std::string const& refSpecies,
         //            = 110 + 1.5/10 * 40 = 116
         //     (vs. 114 w/o the +0.5).
         double const relativeRefLoc(
-            1.0d*(refLoc - refUpBound + 0.5) / (refDownBound - refUpBound));
+            1.0*(refLoc - refUpBound + 0.5) / (refDownBound - refUpBound));
         bool const isQryReversed(anchors.upstream.isQryReversed());
         uint32_t const qryLoc(
             !isQryReversed
