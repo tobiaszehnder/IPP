@@ -26,7 +26,10 @@ for file in ${files[@]}; do
 			sed_string+="s/${sp}//g;"
 		fi
 	done
-	cmd="sed -i \"${sed_string}\" $file"
+	# Use streaming sed instead of sed -i to avoid loading entire file into memory
+	# Create temp file in same directory to preserve permissions and ensure atomic replacement
+	tmp_file="${file}.tmp.$$"
+	cmd="sed \"${sed_string}\" $file > $tmp_file && mv $tmp_file $file"
 	sem --id $sem_id -j $N $cmd
 done
 
