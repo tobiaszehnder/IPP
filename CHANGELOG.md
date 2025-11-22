@@ -1,3 +1,15 @@
+## [1.0.3](https://github.com/tobiaszehnder/IPP/compare/v1.0.2...v1.0.3) (2025-11-22)
+
+
+### Bug Fixes
+
+* alignment pipeline ([#20](https://github.com/tobiaszehnder/IPP/issues/20)) ([9d9bbf6](https://github.com/tobiaszehnder/IPP/commit/9d9bbf631badd33370026523fa3eefb86dd01e64))
+
+
+### Miscellaneous Tasks
+
+* add license ([#16](https://github.com/tobiaszehnder/IPP/issues/16)) ([279990e](https://github.com/tobiaszehnder/IPP/commit/279990ed9fd2139bc49684501f656dd581c642b5))
+
 ## [1.0.2](https://github.com/tobiaszehnder/IPP/compare/v1.0.1...v1.0.2) (2025-06-30)
 
 
