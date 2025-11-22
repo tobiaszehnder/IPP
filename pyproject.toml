@@ -15,6 +15,7 @@ dependencies = [
     "pyranges",
     "setuptools<81",
     "ipykernel>=6.29.5",
+    "snakemake>=7.32.4",
 ]
 
 [tool.uv]
