@@ -141,12 +141,12 @@ The alignment pipeline requires several external command-line tools that must be
 
 - **Linux (apt):**
   ```bash
-  sudo apt-get install last-align ucsc-tools parallel wget
+  sudo apt-get install last-align parallel wget
   ```
 
 - **Linux (yum/dnf):**
   ```bash
-  sudo yum install last-align ucsc-tools parallel wget
+  sudo yum install last-align parallel wget
   ```
 
 - **Manual installation:**
@@ -160,7 +160,20 @@ The alignment pipeline requires several external command-line tools that must be
     # Or copy to system directory:
     # sudo cp bin/lastal bin/lastdb bin/maf-convert /usr/local/bin/
     ```
-  - **UCSC tools**: Download from https://hgdownload.soe.ucsc.edu/admin/exe/ and add to PATH. On macOS, download the macOS-specific binaries:
+  - **UCSC tools**: Download from https://hgdownload.soe.ucsc.edu/admin/exe/ and add to PATH.
+    ```bash
+    # Download UCSC tools for Linux
+    wget -np -nH --cut-dirs=3 -R "index.html*" \
+      http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/axtChain \
+      http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/chainMergeSort \
+      http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/chainPreNet \
+      http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/faToTwoBit \
+      http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/twoBitInfo
+    chmod +x axtChain chainMergeSort chainPreNet faToTwoBit twoBitInfo
+    # Add to PATH or move to a directory in your PATH
+    ```
+    
+    For macOS, download the macOS-specific binaries:
     ```bash
     # Download UCSC tools for macOS
     wget https://hgdownload.soe.ucsc.edu/admin/exe/macOS.x86_64/axtChain

@@ -115,7 +115,7 @@ rule lastal:
         min(workflow.cores, 2)
     shell:
         '''
-        lastal -P {threads} {params.lastdb_prefix} {input.fa} > {output}
+        lastal -v -P {threads} {params.lastdb_prefix} {input.fa} > {output}
         {workflow.basedir}/remove_species_prefix {input.assembly_dir} {output}
         '''
 
@@ -129,7 +129,7 @@ rule lastdb:
     threads:
         min(workflow.cores, 2)
     shell:
-        'lastdb -P {threads} -c {params.prefix} {input}'
+        'lastdb -v -P {threads} -c {params.prefix} {input}'
         
 rule twobit_to_sizes:
     input:
