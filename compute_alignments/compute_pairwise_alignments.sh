@@ -32,7 +32,7 @@ force="none"
 nthreads="--cores 1"
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # directory of this script
 snakefile="$script_dir/Snakefile"
-snakemake_args="-p --rerun-incomplete"
+snakemake_args="-p --rerun-incomplete --scheduler greedy"
 while getopts ":s:t:cr:q:d:f:@:!:n" OPTION; do
  	case $OPTION in
 		s) species=$OPTARG ;;
@@ -87,4 +87,4 @@ snakemake \
 """
 
 if [[ $nthreads == *-n ]]; then echo $cmd; fi # print command during dry run
-eval $cmd # run snakefile
+eval $cmd < /dev/null # run snakefile with stdin redirected to avoid hanging

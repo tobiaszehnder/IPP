@@ -129,7 +129,7 @@ rule lastdb:
     threads:
         min(workflow.cores, 2)
     shell:
-        'lastdb -P {threads} -c {params.prefix} {input}'
+        'lastdb -v -P {threads} -c {params.prefix} {input}'
         
 rule twobit_to_sizes:
     input:
