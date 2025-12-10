@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/tobiaszehnder/IPP/compare/v1.0.3...v1.0.4) (2025-12-10)
+
+
+### Bug Fixes
+
+* alignment snakefile ([#23](https://github.com/tobiaszehnder/IPP/issues/23)) ([c2d24e2](https://github.com/tobiaszehnder/IPP/commit/c2d24e2d6afb937691ebef59235160a53330a71c))
+
 ## [1.0.3](https://github.com/tobiaszehnder/IPP/compare/v1.0.2...v1.0.3) (2025-11-22)
 
 
