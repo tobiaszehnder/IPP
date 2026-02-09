@@ -62,7 +62,7 @@ rule collect_and_binarize_pwalns:
         assembly_dir=assembly_dir,
         species_list=','.join(species_list)
     shell:
-        'uv run python {workflow.basedir}/collect_pwalns.py {params} {output}'
+        'python {workflow.basedir}/collect_pwalns.py {params} {output}'
         
         
 rule all_pre_chain:
