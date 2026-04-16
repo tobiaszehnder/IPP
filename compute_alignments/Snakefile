@@ -113,6 +113,8 @@ rule lastal:
         lastdb_prefix='%s/{s1}' %lastdb_dir
     threads:
         min(workflow.cores, 2)
+    resources:
+        mem_mb=40000
     shell:
         '''
         lastal -v -P {threads} {params.lastdb_prefix} {input.fa} > {output}

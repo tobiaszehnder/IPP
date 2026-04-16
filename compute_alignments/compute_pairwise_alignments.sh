@@ -32,7 +32,7 @@ force="none"
 nthreads="--cores 1"
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # directory of this script
 snakefile="$script_dir/Snakefile"
-snakemake_args="-p --rerun-incomplete --scheduler greedy"
+snakemake_args="-p --rerun-incomplete --scheduler greedy --resources mem_mb=\${SLURM_MEM_PER_NODE:-\$(free -m | awk '/^Mem:/{print \$2}')}"
 while getopts ":s:t:cr:q:d:f:@:!:n" OPTION; do
  	case $OPTION in
 		s) species=$OPTARG ;;
