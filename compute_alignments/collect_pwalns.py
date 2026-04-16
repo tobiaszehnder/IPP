@@ -65,69 +65,57 @@ def read_alignment_blocks_from_chain(chain_file):
     pbar = tqdm.tqdm(leave=False)
     pbar.set_description("Parsing %s" % chain_file)
 
-    # read all lines in chain file
+    # stream the file line by line to avoid loading it all into memory at once
+    alignments = []
     with open(chain_file, "r") as f:
-        lines = f.readlines()
-
-    # predefine number of alignment blocks, reserve memory and update progress bar
-    n_alignment_blocks = sum(
-        [1 for line in lines if not line.startswith(("#", "chain", "\n"))]
-    )
-    alignments = np.empty(shape=(n_alignment_blocks, 5), dtype=np.uint32)
-    pbar.total = n_alignment_blocks
-    pbar.refresh()
-
-    # store coordinates of alignment blocks from chain file to data frame
-    i = 0
-    for line in lines:
-        if (line.startswith("#")) or (line == "\n"):
-            # Comment line
-            continue
-        if line.startswith("chain"):
-            # Header line. Format:
-            # chain score tName tSize tStrand tStart tEnd qName qSize qStrand qStart qEnd id
-            line = line.strip().split()
-            ref_chrom, qry_chrom, qry_strand = [line[i] for i in (2, 7, 9)]
-            ref_chrom_size, ref_start, ref_end, qry_chrom_size, qry_start, qry_end = [
-                int(line[i]) for i in (3, 5, 6, 8, 10, 11)
-            ]
-            # convert chromosome names to indices and save in chrom_map
-            ref_chrom_idx = create_ptr_to_chromosome(ref_chrom)
-            qry_chrom_idx = create_ptr_to_chromosome(qry_chrom)
-        else:
-            # read alignment block
-            line = [int(x) for x in line.strip().split()]
-            block_width = line[0]
-            assert block_width >= 0
-            assert block_width < 2**15, "The MSB must not be set by the length"
-            length_and_strand = block_width | ((1 << 15) if qry_strand == "-" else 0)
-            # The chain file stores coordinates on the reverse strand
-            # from the right end, i.e. chrom_size - x.
-            # The end coordinate is inclusive. an alignment block of
-            # size 3 at the end of a chain [0,5) should have the
-            # coordinates [2,4] (i.e. the positions 2,3,4).
-            alignments[i] = aln_block = [
-                ref_chrom_idx,
-                ref_start,
-                qry_chrom_idx,
-                qry_start if qry_strand == "+" else (qry_chrom_size - qry_start - 1),
-                length_and_strand,
-            ]
-            i += 1
-            pbar.update()
-            if len(line) == 3:
-                # The last line has only length 1
-                # Length 3 means that there are more alignment blocks
-                # Move the ref and qry start by the sum of the alignment
-                # block and the respective gap size
-                ref_gap = line[1]
-                qry_gap = line[2]
-                ref_start += block_width + ref_gap
-                qry_start += block_width + qry_gap
+        for line in f:
+            if (line.startswith("#")) or (line == "\n"):
+                # Comment line
+                continue
+            if line.startswith("chain"):
+                # Header line. Format:
+                # chain score tName tSize tStrand tStart tEnd qName qSize qStrand qStart qEnd id
+                line = line.strip().split()
+                ref_chrom, qry_chrom, qry_strand = [line[i] for i in (2, 7, 9)]
+                ref_chrom_size, ref_start, ref_end, qry_chrom_size, qry_start, qry_end = [
+                    int(line[i]) for i in (3, 5, 6, 8, 10, 11)
+                ]
+                # convert chromosome names to indices and save in chrom_map
+                ref_chrom_idx = create_ptr_to_chromosome(ref_chrom)
+                qry_chrom_idx = create_ptr_to_chromosome(qry_chrom)
+            else:
+                # read alignment block
+                line = [int(x) for x in line.strip().split()]
+                block_width = line[0]
+                assert block_width >= 0
+                assert block_width < 2**15, "The MSB must not be set by the length"
+                length_and_strand = block_width | ((1 << 15) if qry_strand == "-" else 0)
+                # The chain file stores coordinates on the reverse strand
+                # from the right end, i.e. chrom_size - x.
+                # The end coordinate is inclusive. an alignment block of
+                # size 3 at the end of a chain [0,5) should have the
+                # coordinates [2,4] (i.e. the positions 2,3,4).
+                alignments.append([
+                    ref_chrom_idx,
+                    ref_start,
+                    qry_chrom_idx,
+                    qry_start if qry_strand == "+" else (qry_chrom_size - qry_start - 1),
+                    length_and_strand,
+                ])
+                pbar.update()
+                if len(line) == 3:
+                    # The last line has only length 1
+                    # Length 3 means that there are more alignment blocks
+                    # Move the ref and qry start by the sum of the alignment
+                    # block and the respective gap size
+                    ref_gap = line[1]
+                    qry_gap = line[2]
+                    ref_start += block_width + ref_gap
+                    qry_start += block_width + qry_gap
 
     cols = ["ref_chrom", "ref_start", "qry_chrom", "qry_start", "length_and_strand"]
 
-    df = pd.DataFrame(alignments, columns=cols)
+    df = pd.DataFrame(alignments, columns=cols, dtype=np.uint32)
 
     # sort alignment blocks and remove duplicates
     df.sort_values(
