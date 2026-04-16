@@ -32,7 +32,15 @@ force="none"
 nthreads="--cores 1"
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # directory of this script
 snakefile="$script_dir/Snakefile"
-snakemake_args="-p --rerun-incomplete --scheduler greedy --resources mem_mb=\${SLURM_MEM_PER_NODE:-\$(free -m | awk '/^Mem:/{print \$2}')}"
+# Determine available memory in MB (SLURM > Linux free > macOS sysctl)
+if [ -n "${SLURM_MEM_PER_NODE}" ]; then
+    _mem_mb=${SLURM_MEM_PER_NODE}
+elif command -v free &>/dev/null; then
+    _mem_mb=$(free -m | awk '/^Mem:/{print $2}')
+else
+    _mem_mb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1024 / 1024 ))
+fi
+snakemake_args="-p --rerun-incomplete --scheduler greedy --resources mem_mb=${_mem_mb}"
 while getopts ":s:t:cr:q:d:f:@:!:n" OPTION; do
  	case $OPTION in
 		s) species=$OPTARG ;;
