@@ -1,3 +1,17 @@
+## [1.0.5](https://github.com/tobiaszehnder/IPP/compare/v1.0.4...v1.0.5) (2026-04-16)
+
+
+### Bug Fixes
+
+* detect available memory for snakemake resource budgeting ([fdb290b](https://github.com/tobiaszehnder/IPP/commit/fdb290b701591fe0383fe797ffc0a2ea0dd340ba))
+* limit lastal memory via snakemake resources ([b852523](https://github.com/tobiaszehnder/IPP/commit/b8525231bd4f0c7ed6d4a0ce2439de34f3a49768))
+* stream chain file to reduce memory usage ([a4af74d](https://github.com/tobiaszehnder/IPP/commit/a4af74dc859c8d6f160adf82887e7d04d078e32a))
+
+
+### Miscellaneous Tasks
+
+* ignore macOS metadata ([bf0a139](https://github.com/tobiaszehnder/IPP/commit/bf0a1395935dd262251acf463056d76ac99c9d4e))
+
 ## [1.0.4](https://github.com/tobiaszehnder/IPP/compare/v1.0.3...v1.0.4) (2025-12-10)
 
 
