@@ -8,7 +8,6 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
 import tqdm
 
 
@@ -113,21 +112,12 @@ def read_alignment_blocks_from_chain(chain_file):
                     ref_start += block_width + ref_gap
                     qry_start += block_width + qry_gap
 
-    cols = ["ref_chrom", "ref_start", "qry_chrom", "qry_start", "length_and_strand"]
-
-    df = pd.DataFrame(alignments, columns=cols, dtype=np.uint32)
-
-    # sort alignment blocks and remove duplicates
-    df.sort_values(
-        by=["ref_chrom", "ref_start", "qry_chrom", "qry_start"],
-        ignore_index=True,
-        inplace=True,
-    )
-    df.drop_duplicates(ignore_index=True, inplace=True)
+    # sort and deduplicate
+    arr = np.unique(np.array(alignments, dtype=np.uint32), axis=0)
 
     pbar.close()
 
-    return df
+    return arr
 
 
 def main():
@@ -200,28 +190,30 @@ def main():
                 # write sp2 name
                 write_str(sp2)
 
-                # read chain file and save alignment blocks in df
+                # read chain file and save alignment blocks
                 chain_file = get_chain_path(sp1, sp2)
-                df = read_alignment_blocks_from_chain(chain_file)
+                arr = read_alignment_blocks_from_chain(chain_file)
 
                 # write number of ref chrom entries
-                ref_chrom_counts = df.ref_chrom.value_counts(sort=False)
-                write_int(len(ref_chrom_counts), 4)
+                # columns: 0=ref_chrom, 1=ref_start, 2=qry_chrom, 3=qry_start, 4=length_and_strand
+                unique_ref_chroms, ref_chrom_counts = np.unique(arr[:, 0], return_counts=True)
+                ref_chrom_count_map = dict(zip(unique_ref_chroms.tolist(), ref_chrom_counts.tolist()))
+                write_int(len(unique_ref_chroms), 4)
 
-                # loop through df rows and write to file
-                pbar2 = tqdm.tqdm(total=df.shape[0], leave=False)
+                # loop through rows and write to file
+                pbar2 = tqdm.tqdm(total=len(arr), leave=False)
                 pbar2.set_description("Writing alignment blocks (%s, %s)" % (sp1, sp2))
                 last_ref_chrom = None
-                for row in df.itertuples(index=False):
-                    if row.ref_chrom != last_ref_chrom:
+                for ref_chrom, ref_start, qry_chrom, qry_start, length_and_strand in arr:
+                    if ref_chrom != last_ref_chrom:
                         # This is a new ref_chrom -> write a new "header"
-                        write_int(row.ref_chrom, 4)
-                        write_int(ref_chrom_counts[row.ref_chrom], 4)
-                        last_ref_chrom = row.ref_chrom
-                    write_int(row.ref_start, 4)
-                    write_int(row.qry_start, 4)
-                    write_int(row.qry_chrom, 4)
-                    write_int(row.length_and_strand, 2)
+                        write_int(ref_chrom, 4)
+                        write_int(ref_chrom_count_map[ref_chrom], 4)
+                        last_ref_chrom = ref_chrom
+                    write_int(ref_start, 4)
+                    write_int(qry_start, 4)
+                    write_int(qry_chrom, 4)
+                    write_int(length_and_strand, 2)
                     pbar2.update()
 
                 pbar2.close()
