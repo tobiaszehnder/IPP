@@ -11,3 +11,6 @@ data/*bin
 
 # pip configuration
 pip.conf
+
+# macOS metadata
+.DS_Store
