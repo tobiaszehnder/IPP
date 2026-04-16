@@ -95,26 +95,14 @@ print_info "Testing with species: $SPECIES_LIST"
 # Parse species array
 SPECIES_ARRAY=($(echo "$SPECIES_LIST" | tr ',' ' '))
 
-# Note: Using dummy fasta files for fast testing (created below)
-# Skip UCSC verification since we're not downloading real genomes
-print_info "Using dummy fasta files for fast testing (skipping UCSC download)"
+# Copy committed test FASTA files into the test output directory
+print_info "Copying test FASTA files (skipping UCSC download)..."
 
-# Set resource limits
-print_info "Setting resource limits..."
-print_info "  Max memory: ${MAX_MEMORY_GB}GB"
-print_info "  Max threads: $NTHREADS"
-
-# Set memory limit (ulimit -v is in KB, so convert GB to KB)
-MEMORY_KB=$((MAX_MEMORY_GB * 1024 * 1024))
-ulimit -v $MEMORY_KB 2>/dev/null || print_warn "Could not set memory limit (ulimit -v)"
-
-# Limit CPU time (optional, in seconds - 2 hours default)
-ulimit -t 7200 2>/dev/null || print_warn "Could not set CPU time limit"
-
-# Use nice to lower process priority (prevents system freeze)
-# nice values: -20 (highest) to 19 (lowest), default is 10
-NICE_LEVEL="${NICE_LEVEL:-10}"
-print_info "  Process priority: nice $NICE_LEVEL"
+TEST_FASTA_DIR="$REPO_ROOT/data/test_fasta"
+if [ ! -d "$TEST_FASTA_DIR" ]; then
+    print_error "Test FASTA directory not found: $TEST_FASTA_DIR"
+    exit 1
+fi
 
 # Clean up test output directory if it exists
 if [ -d "$TEST_OUTPUT_DIR" ]; then
@@ -122,61 +110,21 @@ if [ -d "$TEST_OUTPUT_DIR" ]; then
     rm -rf "$TEST_OUTPUT_DIR"
 fi
 
-# Create dummy fasta files for fast testing
-create_dummy_fastas() {
-    print_info "Creating dummy fasta files for fast testing..."
-    FASTA_DIR="$TEST_OUTPUT_DIR/fasta"
-    ASSEMBLY_DIR="$TEST_OUTPUT_DIR/assembly"
-    mkdir -p "$FASTA_DIR" "$ASSEMBLY_DIR"
-    
-    # Create a base sequence that will be shared/modified across species
-    # This ensures sequences are alignable
-    BASE_SEQ=$(python3 -c "import random; random.seed(42); print(''.join(random.choices('ATCG', k=1000)))")
-    
-    for i in "${!SPECIES_ARRAY[@]}"; do
-        species="${SPECIES_ARRAY[$i]}"
-        DUMMY_FASTA="$FASTA_DIR/${species}.fa"
-        
-        # Create sequences with ~80% similarity to base sequence (mutations)
-        # This ensures they will align but with some differences
-        python3 <<PYTHON > "$DUMMY_FASTA"
-import random
-random.seed(42 + $i)  # Different seed per species
+FASTA_DIR="$TEST_OUTPUT_DIR/fasta"
+mkdir -p "$FASTA_DIR"
+for species in "${SPECIES_ARRAY[@]}"; do
+    SRC="$TEST_FASTA_DIR/${species}.fa"
+    if [ ! -f "$SRC" ]; then
+        print_error "Missing test FASTA for species '$species': $SRC"
+        exit 1
+    fi
+    cp "$SRC" "$FASTA_DIR/${species}.fa"
+    print_info "  Copied: ${species}.fa"
+done
 
-base_seq = "$BASE_SEQ"
-
-def mutate_sequence(seq, mutation_rate=0.2):
-    """Mutate sequence with given mutation rate"""
-    result = list(seq)
-    for i in range(len(result)):
-        if random.random() < mutation_rate:
-            # Mutate to a different base
-            bases = ['A', 'T', 'C', 'G']
-            bases.remove(result[i])
-            result[i] = random.choice(bases)
-    return ''.join(result)
-
-# Create two chromosomes with shared similarity
-chr1 = mutate_sequence(base_seq, 0.15)  # 85% similarity
-chr2 = mutate_sequence(base_seq, 0.20)  # 80% similarity
-
-print(">chr1")
-print(chr1)
-print(">chr2")
-print(chr2)
-PYTHON
-        
-        # Create corresponding .sizes file (needed by pipeline)
-        SIZES_FILE="$ASSEMBLY_DIR/${species}.sizes"
-        cat > "$SIZES_FILE" <<EOF
-chr1	1000
-chr2	1000
-EOF
-        print_info "  Created: $DUMMY_FASTA ($(wc -c < "$DUMMY_FASTA" | xargs) bytes)"
-    done
-}
-
-create_dummy_fastas
+# Set resource limits
+NICE_LEVEL="${NICE_LEVEL:-10}"
+print_info "Running with: threads=$NTHREADS, nice=$NICE_LEVEL"
 
 # Run the alignment pipeline
 print_info "Running alignment pipeline..."
@@ -288,6 +236,75 @@ else
     exit 1
 fi
 
+# Run projection
+print_info "Running projection from $FIRST_SPECIES to $SECOND_SPECIES..."
+PROJ_OUTPUT_DIR="$TEST_OUTPUT_DIR/projection"
+mkdir -p "$PROJ_OUTPUT_DIR"
+REGIONS_FILE="$REPO_ROOT/data/test_regions.bed"
+
+# Use distance thresholds scaled for the test genome (~20 KB).
+# The default -ddc 300 is calibrated for ~3 GB mammalian genomes; for a 20 KB
+# genome it collapses to a score threshold of ~0, classifying everything as DC.
+# 0.0001 bp gives score_DC = score_IC = 0.999, which correctly distinguishes
+# on-block (score 1.0) from off-block (score 0.0) positions.
+if ! uv run python "$REPO_ROOT/src/ipp/project.py" \
+    -o "$PROJ_OUTPUT_DIR" \
+    -n 1 \
+    -ddc 0.0001 -dic 0.0001 \
+    "$REGIONS_FILE" \
+    "$FIRST_SPECIES" \
+    "$SECOND_SPECIES" \
+    "$PWALN_FILE"; then
+    print_error "Projection failed!"
+    exit 1
+fi
+
+# Verify projection outputs
+REGIONS_BASENAME=$(basename "$REGIONS_FILE" .bed)
+PROJ_FILE="$PROJ_OUTPUT_DIR/${REGIONS_BASENAME}.${FIRST_SPECIES}-${SECOND_SPECIES}.proj"
+UNMAPPED_FILE="$PROJ_OUTPUT_DIR/${REGIONS_BASENAME}.${FIRST_SPECIES}-${SECOND_SPECIES}.unmapped"
+
+if [ -f "$PROJ_FILE" ]; then
+    N_PROJECTED=$(( $(wc -l < "$PROJ_FILE") - 1 ))  # subtract header
+    print_info "✓ Found projection results: $PROJ_FILE ($N_PROJECTED regions projected)"
+else
+    print_error "✗ Missing projection output: $PROJ_FILE"
+    exit 1
+fi
+
+if [ -f "$UNMAPPED_FILE" ]; then
+    N_UNMAPPED=$(grep -c . "$UNMAPPED_FILE" || true)
+    print_info "✓ Found unmapped regions file: $UNMAPPED_FILE ($N_UNMAPPED unmapped)"
+else
+    print_error "✗ Missing unmapped regions file: $UNMAPPED_FILE"
+    exit 1
+fi
+
+if [ "$N_PROJECTED" -eq 0 ]; then
+    print_error "✗ No regions were projected — check alignment quality"
+    exit 1
+fi
+
+# Verify that all three conservation classes are represented
+N_DC=$(awk -F'\t' 'NR>1 && $7=="DC"' "$PROJ_FILE" | wc -l | tr -d ' ')
+N_IC=$(awk -F'\t' 'NR>1 && $7=="IC"' "$PROJ_FILE" | wc -l | tr -d ' ')
+N_NC=$(awk -F'\t' 'NR>1 && $7=="NC"' "$PROJ_FILE" | wc -l | tr -d ' ')
+print_info "Conservation classes: DC=$N_DC IC=$N_IC NC=$N_NC"
+
+if [ "$N_DC" -eq 0 ]; then
+    print_error "✗ No DC regions found — check alignment coverage"
+    exit 1
+fi
+if [ "$N_IC" -eq 0 ]; then
+    print_error "✗ No IC regions found — check bridging species alignment"
+    exit 1
+fi
+if [ "$N_NC" -eq 0 ]; then
+    print_error "✗ No NC regions found — check gap positions in test_regions.bed"
+    exit 1
+fi
+print_info "✓ All three conservation classes (DC/IC/NC) present"
+
 # Summary
 print_info "=========================================="
 print_info "Test completed successfully!"
@@ -297,5 +314,6 @@ print_info "FASTA files: ${#SPECIES_ARRAY[@]}"
 print_info "MAF files: $MAF_COUNT"
 print_info "Chain files: $CHAIN_COUNT"
 print_info "Pwaln collection: 1"
+print_info "Projected regions: $N_PROJECTED / $(grep -c . "$REGIONS_FILE")"
 print_info "=========================================="
 

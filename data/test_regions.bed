@@ -1,0 +1,5 @@
+chr1	100	200	region1_dc
+chr1	1000	1100	region2_dc
+chr1	3415	3421	region3_ic
+chr2	300	400	region4_dc
+chr1	6455	6475	region5_nc
