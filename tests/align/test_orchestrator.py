@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -142,6 +143,29 @@ def test_lastal_thread_hint_capped_at_two(tmp_path):
     )
     assert node_one.commands[0].argv[3] == "1"
     assert node_many.commands[0].argv[3] == "2"  # min(nthreads, 2)
+
+
+def test_node_get_fasta_shell_command_quotes_path_with_space(tmp_path):
+    data_dir = tmp_path / "dir with space"
+    cfg = orch.PipelineConfig(data_dir=data_dir)
+    cfg.make_dirs()
+    node = orch.Orchestrator(cfg)._node_get_fasta(cfg.fasta_dir / "sp1.fa")
+
+    shell = node.commands[0].shell
+    assert shlex.split(shell)[-1] == str(cfg.fasta_dir / "sp1.fa")
+
+
+def test_node_twobit_to_sizes_shell_command_quotes_path_with_space(tmp_path):
+    data_dir = tmp_path / "dir with space"
+    cfg = orch.PipelineConfig(data_dir=data_dir)
+    cfg.make_dirs()
+    twobit = cfg.assembly_dir / "sp1.2bit"
+    node = orch.Orchestrator(cfg)._node_twobit_to_sizes(cfg.assembly_dir / "sp1.sizes")
+
+    shell = node.commands[0].shell
+    parts = shlex.split(shell)
+    assert str(twobit) in parts
+    assert parts[-1] == str(cfg.assembly_dir / "sp1.sizes")
 
 
 def test_mem_semaphore_matches_detected_memory_budget(tmp_path):
