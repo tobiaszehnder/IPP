@@ -8,7 +8,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from align.orchestrator_model import PipelineStepError, SubprocessCommand
+from align.model import PipelineStepError, SubprocessCommand
 
 
 # lastal is memory-hungry; cap how many may run concurrently regardless of

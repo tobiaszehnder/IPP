@@ -7,8 +7,8 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from align.orchestrator_core import Orchestrator
-from align.orchestrator_model import (
+from align.core import Orchestrator
+from align.model import (
     STEP_NAMES,
     PipelineConfig,
     PipelineStepError,

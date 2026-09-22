@@ -7,10 +7,10 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from align.orchestrator_commands import LASTAL_MEM_MB, _detect_total_mem_mb
-from align.orchestrator_dag import DagBuilderMixin
-from align.orchestrator_model import Node, PipelineConfig
-from align.orchestrator_scheduler import SchedulerMixin
+from align.commands import LASTAL_MEM_MB, _detect_total_mem_mb
+from align.dag import DagBuilderMixin
+from align.model import Node, PipelineConfig
+from align.scheduler import SchedulerMixin
 
 
 class Orchestrator(DagBuilderMixin, SchedulerMixin):

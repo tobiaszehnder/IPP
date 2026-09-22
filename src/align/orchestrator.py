@@ -6,26 +6,26 @@ faToTwoBit -> lastdb/lastal -> maf-convert -> axtChain -> chainMergeSort ->
 chainPreNet -> collect_pwalns), skipping steps whose output is already
 up to date, and runs independent species pairs concurrently.
 
-Thin CLI entrypoint; the actual logic lives in the sibling orchestrator_*
-modules (model, commands, dag, scheduler, core, cli).
+Thin CLI entrypoint; the actual logic lives in the sibling model, commands,
+dag, scheduler, core, and cli modules.
 """
 
 from __future__ import annotations
 
-from align.orchestrator_cli import (
+from align.cli import (
     _parse_list_arg,
     _resolve_targets,
     build_arg_parser,
     main,
     parse_force,
 )
-from align.orchestrator_commands import (
+from align.commands import (
     LASTAL_MEM_MB,
     _detect_total_mem_mb,
     _remove_species_prefix,
 )
-from align.orchestrator_core import Orchestrator
-from align.orchestrator_model import (
+from align.core import Orchestrator
+from align.model import (
     STEP_NAMES,
     PipelineConfig,
     PipelineStepError,

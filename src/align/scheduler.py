@@ -9,8 +9,8 @@ from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
-from align.orchestrator_commands import _run_subprocess
-from align.orchestrator_model import Node, PipelineStepError, PyCommand
+from align.commands import _run_subprocess
+from align.model import Node, PipelineStepError, PyCommand
 
 
 class SchedulerMixin:
