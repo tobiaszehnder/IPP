@@ -69,7 +69,7 @@ rule all_pre_chain:
     input:
         allchain=ancient('{chain_dir}/{s1}.{s2}.all.chain'),
         sizes_s1=ancient('%s/{s1}.sizes' %assembly_dir),
-        sizes_s2='%s/{s2}.sizes' %assembly_dir
+        sizes_s2=ancient('%s/{s2}.sizes' %assembly_dir)
     output:
         '{chain_dir}/{s1}.{s2}.all.pre.chain'
     shell:
