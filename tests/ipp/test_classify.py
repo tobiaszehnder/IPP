@@ -106,3 +106,32 @@ def test_functional_conservation_minus_just_outside_maxgap_expansion():
         df, target, thresh_dc=0.9, thresh_ic=0.7, maxgap=500
     )
     assert func_cons["peak1"] == "-"
+
+
+def test_target_regions_not_mutated_in_place():
+    df = _make_projections_df([("peak1", 0.9, 0.9, "chr1", 5005)])
+    target = _target_regions("chr1", 5000, 5010)
+    starts_before = list(target.Start)
+    ends_before = list(target.End)
+    classify_conservation(df, target, thresh_dc=0.9, thresh_ic=0.7, maxgap=500)
+    assert list(target.Start) == starts_before
+    assert list(target.End) == ends_before
+
+
+def test_target_region_start_clamped_at_zero_near_chromosome_start(monkeypatch):
+    # target starts at 100 with maxgap 500 -> naive expansion would give Start=-400.
+    df = _make_projections_df([("peak1", 0.9, 0.9, "chr1", 50)])
+    target = _target_regions("chr1", 100, 110)
+
+    captured_starts = {}
+    original_overlap = pr.PyRanges.overlap
+
+    def spy_overlap(self, other, *args, **kwargs):
+        captured_starts["values"] = list(other.Start)
+        return original_overlap(self, other, *args, **kwargs)
+
+    monkeypatch.setattr(pr.PyRanges, "overlap", spy_overlap)
+
+    classify_conservation(df, target, thresh_dc=0.9, thresh_ic=0.7, maxgap=500)
+
+    assert captured_starts["values"] == [0]
