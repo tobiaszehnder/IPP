@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Fake stand-in for LAST's lastdb: just proves the input fasta exists and
+writes a minimal stub at the given prefix, mirroring real lastdb's *.prj file.
+"""
+
+import sys
+
+args = sys.argv[1:]
+prefix = args[args.index("-c") + 1]
+fasta_path = args[-1]
+
+with open(fasta_path) as f:
+    if not f.read(1):
+        sys.exit(f"lastdb: empty input fasta {fasta_path}")
+
+with open(prefix + ".prj", "w") as f:
+    f.write("version=fake\n")

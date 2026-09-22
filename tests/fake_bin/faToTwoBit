@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Fake stand-in for UCSC faToTwoBit, for orchestrator tests only.
+
+Reads the source fasta (real, non-empty) and writes a small text stub
+recording the first chromosome name and total sequence length, so the fake
+twoBitInfo below can hand back a structurally valid sizes file.
+"""
+
+import sys
+
+fasta_path, out_path = sys.argv[1:3]
+
+chrom = None
+length = 0
+with open(fasta_path) as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if chrom is None:
+                chrom = line[1:].split()[0]
+        else:
+            length += len(line)
+
+if chrom is None:
+    sys.exit(f"faToTwoBit: no sequences found in {fasta_path}")
+
+with open(out_path, "w") as f:
+    f.write(f"FAKE2BIT\t{chrom}\t{length}\n")

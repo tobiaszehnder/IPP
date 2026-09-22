@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Fake stand-in for UCSC axtChain: writes one minimal, valid chain block
+directly to the output path (its last positional argument), same as the
+real tool. Also prints progress text, which the orchestrator redirects
+to a .log file exactly like the real invocation.
+"""
+
+import sys
+
+args = sys.argv[1:]
+psl_path, twobit_s1, twobit_s2, out_path = args[-4:]
+
+for p in (psl_path, twobit_s1, twobit_s2):
+    with open(p) as f:
+        if not f.read(1):
+            sys.exit(f"axtChain: empty input {p}")
+
+print(f"axtChain: chaining {psl_path}")
+
+with open(out_path, "w") as f:
+    f.write("chain 1000 chr1 1000 + 0 100 chr1 1000 + 0 100 1\n")
+    f.write("100\n")
+    f.write("\n")

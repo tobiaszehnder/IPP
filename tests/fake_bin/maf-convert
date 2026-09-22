@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""Fake stand-in for LAST's maf-convert: writes one dummy PSL line to stdout."""
+
+import sys
+
+_fmt, maf_path = sys.argv[1:3]
+
+with open(maf_path) as f:
+    if not f.read(1):
+        sys.exit(f"maf-convert: empty maf {maf_path}")
+
+fields = [
+    "10",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "+",
+    "chr1",
+    "1000",
+    "0",
+    "10",
+    "chr1",
+    "1000",
+    "0",
+    "10",
+    "1",
+    "10,",
+    "0,",
+    "0,",
+]
+print("\t".join(fields))

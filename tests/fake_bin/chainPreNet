@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""Fake stand-in for UCSC chainPreNet: writes its (already-valid) input chain
+straight to the given output path, after checking the sizes files it is
+also handed exist (mirrors the real tool's argument shape)."""
+
+import sys
+
+all_chain_path, sizes_s1, sizes_s2, out_path = sys.argv[1:5]
+
+for p in (sizes_s1, sizes_s2):
+    with open(p) as f:
+        if not f.read(1):
+            sys.exit(f"chainPreNet: empty sizes file {p}")
+
+with open(all_chain_path) as f:
+    content = f.read()
+if not content:
+    sys.exit(f"chainPreNet: empty input {all_chain_path}")
+
+with open(out_path, "w") as f:
+    f.write(content)

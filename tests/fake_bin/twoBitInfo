@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Fake stand-in for UCSC twoBitInfo. Prints "chrom<TAB>size" to stdout,
+matching the real tool's `twoBitInfo x.2bit stdout` output shape.
+"""
+
+import sys
+
+twobit_path = sys.argv[1]
+
+with open(twobit_path) as f:
+    line = f.readline().strip()
+_, chrom, length = line.split("\t")
+print(f"{chrom}\t{length}")
