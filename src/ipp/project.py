@@ -29,7 +29,6 @@ def main() -> None:
     if not os.path.exists(args.out_dir):
         os.mkdir(args.out_dir)
 
-    # input("about to init ipp")
     logger.log("Loading pairwise alignments")
     ipp = projection.load_ipp(args.path_pwaln)
 
@@ -56,7 +55,6 @@ def main() -> None:
         )
     cli.validate_score_thresholds(score_DC, score_IC)
 
-    # input('Press enter to start')
     logger.log("Reading regions from %s" % (args.regions_file))
     ref_coords, coord_names = projection.read_regions(args.regions_file)
 
