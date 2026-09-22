@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
+import argparse
 import os
+import sys
+from collections.abc import Iterable
 
 import pyranges as pr
 
@@ -13,9 +16,24 @@ from ipp.logging_utils import (
 )
 
 
-def main() -> None:
+def main(argv: Iterable[str] | None = None) -> int:
     parser = cli.build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    try:
+        return _run(args)
+    except ValueError as exc:
+        # Usage-type errors: bad input files, inconsistent thresholds.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"\nERROR: {exc}", file=sys.stderr)
+        if args.verbose:
+            raise
+        return 1
+
+
+def _run(args: argparse.Namespace) -> int:
     cli.validate_input_files(args.regions_file, args.target_bedfile)
 
     level = LOG_LEVEL_LOG
@@ -94,7 +112,7 @@ def main() -> None:
 
     if results_df.shape[0] == 0:
         logger.log("No regions from the input bed files could be projected\nDone")
-        return
+        return 0
 
     # write results table to file
     logger.log(
@@ -117,10 +135,10 @@ def main() -> None:
         "not comparable.\n"
     )
     logger.log("Done")
-    return
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
 
 # vim: tabstop=4 shiftwidth=4 expandtab
