@@ -9,15 +9,32 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 COLLECT_PWALNS_SCRIPT = REPO_ROOT / "src" / "align" / "collect_pwalns.py"
 
 
-def _reset_chrom_globals():
-    collect_pwalns.chroms = []
-    collect_pwalns.chroms_map = {}
-
-
 def _write_chain(tmp_path, name, content):
     path = tmp_path / name
     path.write_text(content)
     return path
+
+
+# --------------------------------------------------------------------------
+# ChromosomeIndex: chromosome name <-> stable integer index assignment.
+# --------------------------------------------------------------------------
+
+
+def test_chromosome_index_assigns_stable_indices_in_first_seen_order():
+    chrom_index = collect_pwalns.ChromosomeIndex()
+    assert chrom_index.get_or_add("chr2") == 0
+    assert chrom_index.get_or_add("chr1") == 1
+    assert chrom_index.get_or_add("chr2") == 0  # already known -> same index
+    assert chrom_index.chroms == ["chr2", "chr1"]
+    assert chrom_index.chroms_map == {"chr2": 0, "chr1": 1}
+
+
+def test_chromosome_index_instances_are_independent():
+    a = collect_pwalns.ChromosomeIndex()
+    b = collect_pwalns.ChromosomeIndex()
+    a.get_or_add("chr1")
+    assert b.chroms == []
+    assert b.chroms_map == {}
 
 
 # --------------------------------------------------------------------------
@@ -26,14 +43,15 @@ def _write_chain(tmp_path, name, content):
 
 
 def test_gapped_blocks_accumulate_ref_and_qry_start(tmp_path):
-    _reset_chrom_globals()
     chain = _write_chain(
         tmp_path,
         "sp1.sp2.all.pre.chain",
         "chain 100 chr1 1000 + 0 40 chr2 2000 + 0 40 1\n10 5 5\n10 5 5\n10\n",
     )
 
-    arr = collect_pwalns.read_alignment_blocks_from_chain(str(chain))
+    arr = collect_pwalns.read_alignment_blocks_from_chain(
+        str(chain), collect_pwalns.ChromosomeIndex()
+    )
 
     # 3 blocks of width 10, each followed by a 5bp gap on both ref and qry.
     assert arr[:, 1].tolist() == [0, 15, 30]  # ref_start
@@ -42,14 +60,15 @@ def test_gapped_blocks_accumulate_ref_and_qry_start(tmp_path):
 
 
 def test_reverse_strand_flips_qry_coordinate_and_sets_strand_bit(tmp_path):
-    _reset_chrom_globals()
     chain = _write_chain(
         tmp_path,
         "sp1.sp2.all.pre.chain",
         "chain 100 chr1 1000 + 100 110 chr2 2000 - 50 60 1\n10\n",
     )
 
-    arr = collect_pwalns.read_alignment_blocks_from_chain(str(chain))
+    arr = collect_pwalns.read_alignment_blocks_from_chain(
+        str(chain), collect_pwalns.ChromosomeIndex()
+    )
 
     assert arr.shape == (1, 5)
     ref_chrom, ref_start, qry_chrom, qry_start, length_and_strand = arr[0].tolist()
@@ -62,21 +81,20 @@ def test_reverse_strand_flips_qry_coordinate_and_sets_strand_bit(tmp_path):
 
 
 def test_chromosome_names_map_to_stable_indices(tmp_path):
-    _reset_chrom_globals()
     chain = _write_chain(
         tmp_path,
         "sp1.sp2.all.pre.chain",
         "chain 100 chr1 1000 + 0 10 chr2 2000 + 0 10 1\n10\n",
     )
 
-    collect_pwalns.read_alignment_blocks_from_chain(str(chain))
+    chrom_index = collect_pwalns.ChromosomeIndex()
+    collect_pwalns.read_alignment_blocks_from_chain(str(chain), chrom_index)
 
-    assert collect_pwalns.chroms == ["chr1", "chr2"]
-    assert collect_pwalns.chroms_map == {"chr1": 0, "chr2": 1}
+    assert chrom_index.chroms == ["chr1", "chr2"]
+    assert chrom_index.chroms_map == {"chr1": 0, "chr2": 1}
 
 
 def test_duplicate_alignment_blocks_are_deduplicated(tmp_path):
-    _reset_chrom_globals()
     # Two chains with an identical single block each; np.unique must collapse
     # them to one row rather than keeping both.
     chain = _write_chain(
@@ -86,7 +104,9 @@ def test_duplicate_alignment_blocks_are_deduplicated(tmp_path):
         "chain 100 chr1 1000 + 0 10 chr2 2000 + 0 10 2\n10\n",
     )
 
-    arr = collect_pwalns.read_alignment_blocks_from_chain(str(chain))
+    arr = collect_pwalns.read_alignment_blocks_from_chain(
+        str(chain), collect_pwalns.ChromosomeIndex()
+    )
 
     assert arr.shape == (1, 5)
 
