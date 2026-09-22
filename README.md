@@ -52,7 +52,7 @@ make sync-build
 This will automatically install all required Python packages and set up a virtual environment in `.venv`.
 
 > Alternatively, you can install the required dependencies manually (not recommended):
-> `pip install numpy pandas argparse tabulate tqdm pyranges`
+> `pip install numpy pandas tabulate tqdm pyranges`
 
 ---
 
