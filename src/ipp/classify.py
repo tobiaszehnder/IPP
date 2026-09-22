@@ -15,7 +15,8 @@ def classify_conservation(
 
     Functional conservation is "" for every row when target_regions is None; otherwise
     it is "+" when the projected (multi) coordinate falls within `maxgap` of a target
-    region, else "-". target_regions is expanded in place by maxgap on both ends.
+    region, else "-". target_regions is not modified; internally, a copy is expanded by
+    maxgap on both ends (clamped at 0) to check for overlap.
     """
     sequence_conservation = df_projections.apply(
         lambda x: "DC"
@@ -38,8 +39,9 @@ def classify_conservation(
     # determine functional conservation by checking for overlap with target regions
     functional_conservation = [""] * df_multi.shape[0]
     if target_regions is not None:
-        # expand target regions by maxgap
-        target_regions.Start -= maxgap
+        # expand a copy of target regions by maxgap, clamping Start at 0
+        target_regions = target_regions.copy()
+        target_regions.Start = (target_regions.Start - maxgap).clip(lower=0)
         target_regions.End += maxgap
         # save names of projected regions that overlap with a target region
         names_fc = pr_multi.overlap(target_regions).Name.values
