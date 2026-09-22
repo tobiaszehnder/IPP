@@ -11,7 +11,7 @@ import pytest
 from align import orchestrator as orch
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 ORCHESTRATOR_SCRIPT = REPO_ROOT / "src" / "align" / "orchestrator.py"
 FAKE_BIN = Path(__file__).resolve().parent / "fake_bin"
 TEST_FASTA_DIR = REPO_ROOT / "data" / "test_fasta"
