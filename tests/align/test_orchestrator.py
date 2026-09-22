@@ -220,6 +220,47 @@ def test_full_pipeline_creates_expected_layout_and_pwaln_collection(tmp_path):
             ).is_file()
 
 
+def test_pwaln_collection_built_once_and_shared_across_qry_targets(tmp_path):
+    # Omitting -q requests one .pwaln.bin per other species (sp1.sp2.pwaln.bin,
+    # sp1.sp3.pwaln.bin), but they all contain the identical full-species-list
+    # collection -- collect_pwalns.py must run exactly once, not once per target.
+    data_dir = _make_data_dir(tmp_path)
+    result = run_cli(
+        [
+            "-s",
+            str(SPECIES_FILE),
+            "-r",
+            "sp1",
+            "-c",
+            "-d",
+            str(data_dir),
+            "-@",
+            "2",
+        ],
+        env=_fake_path_env(),
+    )
+    assert result.returncode == 0, result.stderr
+
+    run_lines = [
+        line for line in result.stdout.splitlines() if line.startswith("[run]")
+    ]
+    collection_builds = [line for line in run_lines if "collection over" in line]
+    collection_copies = [
+        line for line in run_lines if "copy of shared collection" in line
+    ]
+    assert len(collection_builds) == 1, (
+        f"expected collect_pwalns.py to run exactly once, got: {collection_builds}"
+    )
+    assert len(collection_copies) == 2  # sp1.sp2 and sp1.sp3
+
+    pwaln_dir = data_dir / "alignment" / "pwaln"
+    sp2_pwaln = pwaln_dir / "sp1.sp2.pwaln.bin"
+    sp3_pwaln = pwaln_dir / "sp1.sp3.pwaln.bin"
+    assert sp2_pwaln.is_file()
+    assert sp3_pwaln.is_file()
+    assert sp2_pwaln.read_bytes() == sp3_pwaln.read_bytes()
+
+
 def test_rerun_without_changes_skips_every_step(tmp_path):
     data_dir = _make_data_dir(tmp_path)
     env = _fake_path_env()
