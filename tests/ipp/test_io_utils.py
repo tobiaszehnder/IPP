@@ -2,7 +2,7 @@ import ipp_cpp  # type: ignore
 import pandas as pd
 import pytest
 
-from ipp.io_utils import build_output_paths, convert_df_to_bed
+from ipp.io_utils import build_output_paths, convert_df_to_bed, write_unmapped
 
 
 BED_COLUMNS = [
@@ -86,3 +86,15 @@ def test_build_output_paths():
         "bed_ref": "/out/my_regions.mm39.bed",
         "bed_qry": "/out/my_regions.hg38.bed",
     }
+
+
+def test_write_unmapped_empty_list_writes_empty_file(tmp_path):
+    out_path = tmp_path / "empty.unmapped"
+    write_unmapped([], str(out_path))
+    assert out_path.read_bytes() == b""
+
+
+def test_write_unmapped_writes_one_region_per_line(tmp_path):
+    out_path = tmp_path / "regions.unmapped"
+    write_unmapped(["peak1", "peak2"], str(out_path))
+    assert out_path.read_text() == "peak1\npeak2\n"
