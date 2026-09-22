@@ -24,8 +24,8 @@ def test_validate_score_thresholds_passes_when_dc_at_least_ic():
     cli.validate_score_thresholds(0.9, 0.9)
 
 
-def test_validate_score_thresholds_exits_when_dc_below_ic():
-    with pytest.raises(SystemExit) as exc_info:
+def test_validate_score_thresholds_raises_when_dc_below_ic():
+    with pytest.raises(ValueError) as exc_info:
         cli.validate_score_thresholds(0.5, 0.8)
     assert "score_DC" in str(exc_info.value)
 
@@ -45,23 +45,23 @@ def test_validate_input_files_passes_when_target_bedfile_is_none(tmp_path):
     cli.validate_input_files(str(regions_file), None)
 
 
-def test_validate_input_files_exits_with_clear_message_for_missing_regions_file(
+def test_validate_input_files_raises_with_clear_message_for_missing_regions_file(
     tmp_path,
 ):
     missing = tmp_path / "does_not_exist.bed"
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         cli.validate_input_files(str(missing), None)
     message = str(exc_info.value)
     assert "not found" in message
     assert str(missing) in message
 
 
-def test_validate_input_files_exits_with_clear_message_for_missing_target_bedfile(
+def test_validate_input_files_raises_with_clear_message_for_missing_target_bedfile(
     tmp_path,
 ):
     regions_file = tmp_path / "regions.bed"
     regions_file.write_text("chr1\t0\t10\tpeak1\n")
     missing_target = tmp_path / "does_not_exist_target.bed"
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         cli.validate_input_files(str(regions_file), str(missing_target))
     assert "not found" in str(exc_info.value)
