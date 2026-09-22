@@ -26,8 +26,7 @@ def main() -> None:
     logger = ProjectionLogger(level)
 
     # define variables and create output directory
-    if not os.path.exists(args.out_dir):
-        os.mkdir(args.out_dir)
+    os.makedirs(args.out_dir, exist_ok=True)
 
     logger.log("Loading pairwise alignments")
     ipp = projection.load_ipp(args.path_pwaln)
