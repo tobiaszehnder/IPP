@@ -2,7 +2,6 @@
 
 import argparse
 import os
-import sys
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_input_files(regions_file: str, target_bedfile: str | None) -> None:
-    """Exit with a clear message if a required input file is missing (no traceback)."""
+    """Raise ValueError with a clear message if a required input file is missing."""
     for label, path in (
         ("regions file", regions_file),
         ("target bedfile", target_bedfile),
@@ -121,10 +120,10 @@ def validate_input_files(regions_file: str, target_bedfile: str | None) -> None:
         if path is None:
             continue
         if not os.path.isfile(path):
-            sys.exit(f"Error: {label} not found: {path}")
+            raise ValueError(f"{label} not found: {path}")
 
 
 def validate_score_thresholds(score_dc: float, score_ic: float) -> None:
     """DC is the stricter class, so score_DC must not be lower than score_IC."""
     if score_dc < score_ic:
-        sys.exit("Error: score_DC must not be lower than score_IC")
+        raise ValueError("score_DC must not be lower than score_IC")
