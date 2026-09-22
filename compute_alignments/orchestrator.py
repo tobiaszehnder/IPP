@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Plain-Python replacement for the old Snakemake alignment pipeline.
+"""Orchestrates the pairwise-alignment pipeline used to build .pwaln files.
 
-Builds the same directory layout and the same chain of external-tool calls
-(lastdb/lastal/maf-convert/axtChain/chainMergeSort/chainPreNet/faToTwoBit/
-twoBitInfo/wget) that compute_alignments/Snakefile used to drive, but as a
-small hand-rolled dependency graph instead of a workflow-engine dependency.
+For each species pair, builds a small dependency graph of steps (fasta ->
+faToTwoBit -> lastdb/lastal -> maf-convert -> axtChain -> chainMergeSort ->
+chainPreNet -> collect_pwalns), skipping steps whose output is already
+up to date, and runs independent species pairs concurrently.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-# lastal's Snakemake resource hint (resources: mem_mb=40000): used to cap how
-# many lastal processes may run concurrently, regardless of --nthreads.
+# lastal is memory-hungry; cap how many may run concurrently regardless of
+# --nthreads so we don't exceed the machine's memory budget.
 LASTAL_MEM_MB = 40000
 
 COMPUTE_ALIGNMENTS_DIR = Path(__file__).resolve().parent
@@ -477,9 +477,9 @@ class Orchestrator:
             name="all_pre_chain",
             output=path,
             inputs=(all_chain, sizes_s1, sizes_s2),
-            # sizes_s2 intentionally NOT marked ancient, matching the
-            # (asymmetric) behavior of the original Snakefile rule.
-            ancient_inputs=frozenset({all_chain, sizes_s1}),
+            # Both sizes files are static per-species outputs reused across
+            # many pairs; neither should trigger a rebuild on its own.
+            ancient_inputs=frozenset({all_chain, sizes_s1, sizes_s2}),
             label=f"{s1} vs {s2}",
             commands=[cmd],
         )
@@ -637,10 +637,7 @@ def _resolve_targets(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=(
-            "Compute pairwise genome alignments for IPP: a plain-Python "
-            "orchestrator that replaces the old Snakemake pipeline."
-        ),
+        description="Compute pairwise genome alignments for IPP.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(

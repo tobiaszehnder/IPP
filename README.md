@@ -119,9 +119,7 @@ We provide a set of precomputed `.pwaln` files for selected comparisons across v
 ---
 
 ### Generate custom alignments
-We provide a small Python orchestrator to compute your own alignment collections for your choice of species. For that, run `compute_alignments/orchestrator.py`. The script will guide you through the whole alignment process from fasta to chain files.
-
-This used to be a Snakemake pipeline driven by `compute_alignments/compute_pairwise_alignments.sh`. That script and the Snakefile are gone; `compute_alignments/orchestrator.py` is now the one supported way to run the alignment pipeline, with no workflow-engine dependency.
+We provide a small Python orchestrator to compute your own alignment collections for your choice of species. For that, run `compute_alignments/orchestrator.py`. It has no workflow-engine dependency: it plans the steps needed to go from fasta to chain files for your chosen species, skips steps whose output is already up to date, and runs independent species pairs concurrently.
 
 #### Installing alignment pipeline dependencies
 
