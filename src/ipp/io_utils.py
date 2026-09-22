@@ -67,7 +67,8 @@ def convert_df_to_bed(df: pd.DataFrame, which: str) -> pd.DataFrame:
 def write_unmapped(unmapped_regions: list, out_path: str) -> None:
     """Write one unmapped region name per line."""
     with open(out_path, "w") as f:
-        f.write("\n".join(unmapped_regions) + "\n")
+        if unmapped_regions:
+            f.write("\n".join(unmapped_regions) + "\n")
 
 
 def write_proj_table(results_df: pd.DataFrame, out_path: str) -> None:
