@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""Fake stand-in for wget: ignores the URL and writes a tiny gzip-compressed
+fasta to stdout, so the real `gzip -d` downstream still works."""
+
+import gzip
+import sys
+
+sys.stdout.flush()
+with gzip.GzipFile(fileobj=sys.stdout.buffer, mode="wb") as gz:
+    gz.write(b">chr1\nACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n")

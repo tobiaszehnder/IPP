@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Fake stand-in for LAST's lastal: writes a minimal, structurally valid MAF
+block to stdout, referencing chr1 (the only chromosome in the test fixtures).
+"""
+
+import sys
+
+args = sys.argv[1:]
+lastdb_prefix = args[-2]
+fasta_path = args[-1]
+
+with open(lastdb_prefix + ".prj") as f:
+    if not f.read(1):
+        sys.exit(f"lastal: missing lastdb index {lastdb_prefix}.prj")
+with open(fasta_path) as f:
+    if not f.read(1):
+        sys.exit(f"lastal: empty query fasta {fasta_path}")
+
+print("##maf version=1")
+print("a score=100")
+print("s chr1 0 10 + 1000 ACGTACGTAC")
+print("s chr1 0 10 + 1000 ACGTACGTAC")
+print()

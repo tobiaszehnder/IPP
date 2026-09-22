@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Fake stand-in for UCSC chainMergeSort: passes its (already-valid) input
+chain through to stdout, same shape as the real tool for a single input."""
+
+import sys
+
+axt_chain_path = sys.argv[1]
+
+with open(axt_chain_path) as f:
+    content = f.read()
+if not content:
+    sys.exit(f"chainMergeSort: empty input {axt_chain_path}")
+
+sys.stdout.write(content)

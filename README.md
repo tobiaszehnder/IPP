@@ -119,7 +119,7 @@ We provide a set of precomputed `.pwaln` files for selected comparisons across v
 ---
 
 ### Generate custom alignments
-We provide a Snakemake pipeline to compute your own alignment collections for your choice of species. For that, run `compute_alignments/compute_pairwise_alignments.sh`. The script will guide you through the whole alignment process from fasta to chain files. 
+We provide a small Python orchestrator to compute your own alignment collections for your choice of species. For that, run `src/align/orchestrator.py`. It has no workflow-engine dependency: it plans the steps needed to go from fasta to chain files for your chosen species, skips steps whose output is already up to date, and runs independent species pairs concurrently.
 
 #### Installing alignment pipeline dependencies
 
@@ -128,25 +128,24 @@ The alignment pipeline requires several external command-line tools that must be
 **Required tools:**
 - **LAST alignment tools** (`lastal`, `lastdb`, `maf-convert`): Download from [LAST website](http://last.cbrc.jp/) or install via package manager
 - **UCSC tools** (`axtChain`, `chainMergeSort`, `chainPreNet`, `faToTwoBit`, `twoBitInfo`): Download from [UCSC downloads](https://hgdownload.soe.ucsc.edu/admin/exe/) or install via package manager
-- **GNU parallel** (provides `sem` command): Install via package manager
 - **wget**: Usually pre-installed on Linux, install via package manager if needed
 
 **Installation examples:**
 
 - **macOS (Homebrew):**
   ```bash
-  brew install parallel wget
+  brew install wget
   # LAST and UCSC tools are not available via Homebrew - install manually (see below)
   ```
 
 - **Linux (apt):**
   ```bash
-  sudo apt-get install last-align parallel wget
+  sudo apt-get install last-align wget
   ```
 
 - **Linux (yum/dnf):**
   ```bash
-  sudo yum install last-align parallel wget
+  sudo yum install last-align wget
   ```
 
 - **Manual installation:**
@@ -185,33 +184,34 @@ The alignment pipeline requires several external command-line tools that must be
     # Add to PATH or move to a directory in your PATH
     ```
 
-Verify installation by running: `make test-alignments` (which checks for all required tools). 
+Verify installation by running: `make test-alignments` (which checks for all required tools).
 
 In the output directory (defined by the `-d` flag), the pipeline will create a predefined folder structures to store relevant inputs like fasta files. The pipeline will try to look for genome fasta files from UCSC from the provided list of species (flag `-s`), but you can of course use your own **custom genomes**. In this case, store these fasta files under `<output_directory_name>/fasta`. 
 
 ```
-Usage: compute_alignments/compute_pairwise_alignments.sh -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
+Usage: src/align/orchestrator.py -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
 
 required (one or the other):
-  -s SPECIES      Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
-  -t TARGETS      Comma-separated list or file with target files (e.g. a list of chain files) to be produced
+  -s, --species SPECIES      Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
+  -t, --targets TARGETS      Comma-separated list or file with target files (e.g. a list of chain files) to be produced
 
 optional:
-  -c CREATE_PWALN_COLLECTION		Flag for creating the pwaln collection file. Used as input for IPP
-  -r REFERENCE		Reference species. Necessary for naming the collection file
-  -q QUERY			Query species. Necessary for naming the collection file. If no query is provided, will generate for all non-reference species. 
-  -d DATA_DIR   		Output directory. The script will create a predefined folder structure in that directory. (e.g. separate folders for alignment files, fasta files, etc.)
-  -f FORCE			Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
-  -@ NTHREADS     	Number of parallel threads
-  -n DRY_RUN      	Flag for a dry run, i.e. only print the commands instead of executing
-  -! SNAKEMAKE_ARGS		Optional arguments for Snakemake in quotes, i.e. -! "--debug-dag --unlock -p"
+  -c, --create_pwaln_collection   Flag for creating the pwaln collection file. Used as input for IPP
+  -r, --ref REFERENCE             Reference species. Required together with -c
+  -q, --qry QUERY                 Query species. If no query is provided, will generate for all non-reference species.
+  -d, --data_dir DATA_DIR         Output directory. The script will create a predefined folder structure in that directory. (e.g. separate folders for alignment files, fasta files, etc.)
+  -f, --force FORCE               Force execution and overwriting existing files. Possible values: none (default) | space-separated step names | all
+  -@, --nthreads NTHREADS         Number of parallel threads
+  -n, --dry_run                   Flag for a dry run, i.e. only print the commands instead of executing
 ```
+
+Run `uv run python src/align/orchestrator.py -h` for the full, up-to-date option list. Valid step names for `-f`/`--force` are: `get_fasta`, `fa_to_twobit`, `twobit_to_sizes`, `lastdb`, `lastal`, `maf_to_psl`, `axt_chain`, `all_chain`, `all_pre_chain`, `collect_and_binarize_pwalns`.
 
 With these, you can create the final collection of pairwise alignments `.pwaln` between reference, target and a given set of bridging species that is used for running IPP. 
 For example, to generate the required `.pwaln` file for a mouse-chicken comparison using our seletected bridging species (provided as a text file `species_ipp.txt') using 10 cores:
 
 ```bash
-compute_alignments/compute_pairwise_alignments.sh -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
+uv run python src/align/orchestrator.py -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
 ```
 
 Computing these large alignment files is time- and resource- consuming. We recommend running the pipeline on a large computing server with multi-core processing. 
