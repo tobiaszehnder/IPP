@@ -10,7 +10,7 @@ on:
       - main
     paths:
       - .github/workflows/ci-cd.yaml
-      - ipp/**
+      - src/**
       - tests/**
   release:
     types:
