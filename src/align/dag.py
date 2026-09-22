@@ -8,6 +8,7 @@ all_pre_chain, pwaln). Mixed into `Orchestrator`, which supplies `cfg`,
 
 from __future__ import annotations
 
+import shlex
 import sys
 from pathlib import Path
 
@@ -80,7 +81,11 @@ class DagBuilderMixin:
         species = path.name.removesuffix(".fa")
         link = f"http://hgdownload.cse.ucsc.edu/goldenpath/{species}/bigZips/{species}.fa.gz"
         cmd = SubprocessCommand(
-            argv=[], shell=f"wget -nc {link} -O /dev/stdout | gzip -d > {path}"
+            argv=[],
+            shell=(
+                f"wget -nc {shlex.quote(link)} -O /dev/stdout"
+                f" | gzip -d > {shlex.quote(str(path))}"
+            ),
         )
         return Node(
             name="get_fasta",
@@ -108,7 +113,11 @@ class DagBuilderMixin:
         species = path.name.removesuffix(".sizes")
         twobit = self.cfg.assembly_dir / f"{species}.2bit"
         cmd = SubprocessCommand(
-            argv=[], shell=f"twoBitInfo {twobit} stdout | sort -k2rn > {path}"
+            argv=[],
+            shell=(
+                f"twoBitInfo {shlex.quote(str(twobit))} stdout"
+                f" | sort -k2rn > {shlex.quote(str(path))}"
+            ),
         )
         return Node(
             name="twobit_to_sizes",
