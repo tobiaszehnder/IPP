@@ -8,6 +8,8 @@ all_pre_chain, pwaln). Mixed into `Orchestrator`, which supplies `cfg`,
 
 from __future__ import annotations
 
+import hashlib
+import shutil
 import sys
 from pathlib import Path
 
@@ -240,13 +242,47 @@ class DagBuilderMixin:
             commands=[cmd],
         )
 
+    def _pwaln_collection_path(self) -> Path:
+        # One canonical collection per distinct species set: every requested
+        # {ref}.{qry}.pwaln.bin target contains the exact same content (the
+        # full species_list, not just that pair), so they must all share one
+        # underlying build rather than each re-running collect_pwalns.py.
+        key = ",".join(sorted(self.species_list))
+        digest = hashlib.sha1(key.encode()).hexdigest()[:12]
+        return self.cfg.pwaln_dir / f".collection-{digest}.pwaln.bin"
+
     def _node_pwaln(self, path: Path) -> Node:
-        ref, qry = self._split_pair(path, ".pwaln.bin")
         if self.species_list is None:
             raise ValueError(
                 f"cannot build {path}: a pwaln collection requires the full "
                 "species list (pass --species), even when using --targets"
             )
+        canonical = self._pwaln_collection_path()
+        if path == canonical:
+            return self._node_build_pwaln_collection(canonical)
+
+        # Any other requested name is a cheap copy of the shared collection,
+        # so collect_pwalns.py only ever runs once per species set no matter
+        # how many {ref}.{qry}.pwaln.bin targets are requested.
+        ref, qry = self._split_pair(path, ".pwaln.bin")
+        collection_node = self._node_for(canonical)
+        collection_output = collection_node.output
+
+        def _copy() -> None:
+            shutil.copy2(collection_output, path)
+
+        return Node(
+            name="collect_and_binarize_pwalns",
+            output=path,
+            inputs=(collection_output,),
+            ancient_inputs=frozenset(),
+            label=f"{ref} vs {qry} (copy of shared collection)",
+            commands=[
+                PyCommand(description=f"copy {collection_output} -> {path}", fn=_copy)
+            ],
+        )
+
+    def _node_build_pwaln_collection(self, path: Path) -> Node:
         chain_inputs = tuple(
             self.cfg.chain_dir / f"{sp1}.{sp2}.all.pre.chain"
             for sp1 in self.species_list
@@ -269,6 +305,6 @@ class DagBuilderMixin:
             output=path,
             inputs=chain_inputs,
             ancient_inputs=frozenset(),
-            label=f"{ref} vs {qry} (collection over {species_csv})",
+            label=f"collection over {species_csv}",
             commands=[cmd],
         )
