@@ -43,21 +43,24 @@ FORMAT_VERSION = 4
 #   } num_chromosomes times
 
 
-def create_ptr_to_chromosome(chrom_name):
-    # Checks whether the given chromosome is already in `chroms`. If so, then
-    # its index is returned. Otherwise, it is added to that list.
-    global chroms
-    global chroms_map
-    if chrom_name in chroms_map:
-        return chroms_map[chrom_name]
-    else:
-        idx = len(chroms)
-        chroms_map[chrom_name] = idx
-        chroms.append(chrom_name)
+class ChromosomeIndex:
+    """Assigns each chromosome name a stable integer index on first sight."""
+
+    def __init__(self) -> None:
+        self.chroms: list[str] = []
+        self.chroms_map: dict[str, int] = {}
+
+    def get_or_add(self, chrom_name: str) -> int:
+        idx = self.chroms_map.get(chrom_name)
+        if idx is not None:
+            return idx
+        idx = len(self.chroms)
+        self.chroms_map[chrom_name] = idx
+        self.chroms.append(chrom_name)
         return idx
 
 
-def read_alignment_blocks_from_chain(chain_file):
+def read_alignment_blocks_from_chain(chain_file: str, chrom_index: ChromosomeIndex):
     # read chain file and return data frame with alignment blocks
 
     # initialize progress bar
@@ -84,9 +87,9 @@ def read_alignment_blocks_from_chain(chain_file):
                     qry_start,
                     qry_end,
                 ) = [int(line[i]) for i in (3, 5, 6, 8, 10, 11)]
-                # convert chromosome names to indices and save in chrom_map
-                ref_chrom_idx = create_ptr_to_chromosome(ref_chrom)
-                qry_chrom_idx = create_ptr_to_chromosome(qry_chrom)
+                # convert chromosome names to indices
+                ref_chrom_idx = chrom_index.get_or_add(ref_chrom)
+                qry_chrom_idx = chrom_index.get_or_add(qry_chrom)
             else:
                 # read alignment block
                 line = [int(x) for x in line.strip().split()]
@@ -147,11 +150,7 @@ def main():
     args = parser.parse_args()
     species_list = args.species_list.split(",")
 
-    # initialize chromosome list and index dict
-    global chroms
-    chroms = []
-    global chroms_map
-    chroms_map = {}
+    chrom_index = ChromosomeIndex()
 
     # define functions
     def get_chain_path(ref, qry):
@@ -203,10 +202,11 @@ def main():
 
                 # read chain file and save alignment blocks
                 chain_file = get_chain_path(sp1, sp2)
-                arr = read_alignment_blocks_from_chain(chain_file)
+                arr = read_alignment_blocks_from_chain(chain_file, chrom_index)
 
                 # write number of ref chrom entries
-                # columns: 0=ref_chrom, 1=ref_start, 2=qry_chrom, 3=qry_start, 4=length_and_strand
+                # columns: 0=ref_chrom, 1=ref_start, 2=qry_chrom, 3=qry_start,
+                # 4=length_and_strand
                 unique_ref_chroms, ref_chrom_counts = np.unique(
                     arr[:, 0], return_counts=True
                 )
@@ -242,8 +242,8 @@ def main():
                 pbar.update()
 
         # write chromosomes
-        write_int(len(chroms), 4)
-        for chrom in chroms:
+        write_int(len(chrom_index.chroms), 4)
+        for chrom in chrom_index.chroms:
             write_str(chrom)
 
     pbar.close()
