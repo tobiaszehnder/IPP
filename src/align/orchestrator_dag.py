@@ -11,8 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from compute_alignments.orchestrator_commands import _remove_species_prefix
-from compute_alignments.orchestrator_model import (
+from align.orchestrator_commands import _remove_species_prefix
+from align.orchestrator_model import (
     Node,
     PipelineConfig,
     PyCommand,

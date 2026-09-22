@@ -12,37 +12,27 @@ modules (model, commands, dag, scheduler, core, cli).
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-
-# Allow running this file directly (`python compute_alignments/orchestrator.py`),
-# where the repo root isn't on sys.path yet, as well as importing it as
-# `compute_alignments.orchestrator` (e.g. from tests).
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from compute_alignments.orchestrator_cli import (
+from align.orchestrator_cli import (
     _parse_list_arg,
     _resolve_targets,
     build_arg_parser,
     main,
     parse_force,
 )
-from compute_alignments.orchestrator_commands import (
+from align.orchestrator_commands import (
     LASTAL_MEM_MB,
     _detect_total_mem_mb,
     _remove_species_prefix,
 )
-from compute_alignments.orchestrator_core import Orchestrator
-from compute_alignments.orchestrator_model import (
+from align.orchestrator_core import Orchestrator
+from align.orchestrator_model import (
     STEP_NAMES,
     PipelineConfig,
     PipelineStepError,
 )
 
 
-# Re-exported for backwards-compatible imports (e.g. `from compute_alignments
+# Re-exported for backwards-compatible imports (e.g. `from align
 # import orchestrator as orch; orch.PipelineConfig(...)`).
 __all__ = [
     "LASTAL_MEM_MB",

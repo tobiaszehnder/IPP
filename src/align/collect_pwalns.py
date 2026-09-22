@@ -76,9 +76,14 @@ def read_alignment_blocks_from_chain(chain_file):
                 # chain score tName tSize tStrand tStart tEnd qName qSize qStrand qStart qEnd id
                 line = line.strip().split()
                 ref_chrom, qry_chrom, qry_strand = [line[i] for i in (2, 7, 9)]
-                ref_chrom_size, ref_start, ref_end, qry_chrom_size, qry_start, qry_end = [
-                    int(line[i]) for i in (3, 5, 6, 8, 10, 11)
-                ]
+                (
+                    ref_chrom_size,
+                    ref_start,
+                    ref_end,
+                    qry_chrom_size,
+                    qry_start,
+                    qry_end,
+                ) = [int(line[i]) for i in (3, 5, 6, 8, 10, 11)]
                 # convert chromosome names to indices and save in chrom_map
                 ref_chrom_idx = create_ptr_to_chromosome(ref_chrom)
                 qry_chrom_idx = create_ptr_to_chromosome(qry_chrom)
@@ -88,19 +93,25 @@ def read_alignment_blocks_from_chain(chain_file):
                 block_width = line[0]
                 assert block_width >= 0
                 assert block_width < 2**15, "The MSB must not be set by the length"
-                length_and_strand = block_width | ((1 << 15) if qry_strand == "-" else 0)
+                length_and_strand = block_width | (
+                    (1 << 15) if qry_strand == "-" else 0
+                )
                 # The chain file stores coordinates on the reverse strand
                 # from the right end, i.e. chrom_size - x.
                 # The end coordinate is inclusive. an alignment block of
                 # size 3 at the end of a chain [0,5) should have the
                 # coordinates [2,4] (i.e. the positions 2,3,4).
-                alignments.append([
-                    ref_chrom_idx,
-                    ref_start,
-                    qry_chrom_idx,
-                    qry_start if qry_strand == "+" else (qry_chrom_size - qry_start - 1),
-                    length_and_strand,
-                ])
+                alignments.append(
+                    [
+                        ref_chrom_idx,
+                        ref_start,
+                        qry_chrom_idx,
+                        qry_start
+                        if qry_strand == "+"
+                        else (qry_chrom_size - qry_start - 1),
+                        length_and_strand,
+                    ]
+                )
                 pbar.update()
                 if len(line) == 3:
                     # The last line has only length 1
@@ -196,15 +207,25 @@ def main():
 
                 # write number of ref chrom entries
                 # columns: 0=ref_chrom, 1=ref_start, 2=qry_chrom, 3=qry_start, 4=length_and_strand
-                unique_ref_chroms, ref_chrom_counts = np.unique(arr[:, 0], return_counts=True)
-                ref_chrom_count_map = dict(zip(unique_ref_chroms.tolist(), ref_chrom_counts.tolist()))
+                unique_ref_chroms, ref_chrom_counts = np.unique(
+                    arr[:, 0], return_counts=True
+                )
+                ref_chrom_count_map = dict(
+                    zip(unique_ref_chroms.tolist(), ref_chrom_counts.tolist())
+                )
                 write_int(len(unique_ref_chroms), 4)
 
                 # loop through rows and write to file
                 pbar2 = tqdm.tqdm(total=len(arr), leave=False)
                 pbar2.set_description("Writing alignment blocks (%s, %s)" % (sp1, sp2))
                 last_ref_chrom = None
-                for ref_chrom, ref_start, qry_chrom, qry_start, length_and_strand in arr:
+                for (
+                    ref_chrom,
+                    ref_start,
+                    qry_chrom,
+                    qry_start,
+                    length_and_strand,
+                ) in arr:
                     if ref_chrom != last_ref_chrom:
                         # This is a new ref_chrom -> write a new "header"
                         write_int(ref_chrom, 4)

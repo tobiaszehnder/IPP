@@ -16,7 +16,7 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SPECIES_FILE="$REPO_ROOT/data/species_test.txt"
 TEST_OUTPUT_DIR="$REPO_ROOT/test_alignments_output"
-ORCHESTRATOR_SCRIPT="$REPO_ROOT/compute_alignments/orchestrator.py"
+ORCHESTRATOR_SCRIPT="$REPO_ROOT/src/align/orchestrator.py"
 NTHREADS="${NTHREADS:-2}"
 MAX_MEMORY_GB="${MAX_MEMORY_GB:-8}"
 

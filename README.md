@@ -119,7 +119,7 @@ We provide a set of precomputed `.pwaln` files for selected comparisons across v
 ---
 
 ### Generate custom alignments
-We provide a small Python orchestrator to compute your own alignment collections for your choice of species. For that, run `compute_alignments/orchestrator.py`. It has no workflow-engine dependency: it plans the steps needed to go from fasta to chain files for your chosen species, skips steps whose output is already up to date, and runs independent species pairs concurrently.
+We provide a small Python orchestrator to compute your own alignment collections for your choice of species. For that, run `src/align/orchestrator.py`. It has no workflow-engine dependency: it plans the steps needed to go from fasta to chain files for your chosen species, skips steps whose output is already up to date, and runs independent species pairs concurrently.
 
 #### Installing alignment pipeline dependencies
 
@@ -189,7 +189,7 @@ Verify installation by running: `make test-alignments` (which checks for all req
 In the output directory (defined by the `-d` flag), the pipeline will create a predefined folder structures to store relevant inputs like fasta files. The pipeline will try to look for genome fasta files from UCSC from the provided list of species (flag `-s`), but you can of course use your own **custom genomes**. In this case, store these fasta files under `<output_directory_name>/fasta`. 
 
 ```
-Usage: compute_alignments/orchestrator.py -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
+Usage: src/align/orchestrator.py -s SPECIES -t TARGETS [optional: -d DATA_DIR -f FORCE -@ NTHREADS -n DRY_RUN]
 
 required (one or the other):
   -s, --species SPECIES      Comma-separated list or file (first column) with species (genome builds) for which to compute pairwise alignments
@@ -205,13 +205,13 @@ optional:
   -n, --dry_run                   Flag for a dry run, i.e. only print the commands instead of executing
 ```
 
-Run `uv run python compute_alignments/orchestrator.py -h` for the full, up-to-date option list. Valid step names for `-f`/`--force` are: `get_fasta`, `fa_to_twobit`, `twobit_to_sizes`, `lastdb`, `lastal`, `maf_to_psl`, `axt_chain`, `all_chain`, `all_pre_chain`, `collect_and_binarize_pwalns`.
+Run `uv run python src/align/orchestrator.py -h` for the full, up-to-date option list. Valid step names for `-f`/`--force` are: `get_fasta`, `fa_to_twobit`, `twobit_to_sizes`, `lastdb`, `lastal`, `maf_to_psl`, `axt_chain`, `all_chain`, `all_pre_chain`, `collect_and_binarize_pwalns`.
 
 With these, you can create the final collection of pairwise alignments `.pwaln` between reference, target and a given set of bridging species that is used for running IPP. 
 For example, to generate the required `.pwaln` file for a mouse-chicken comparison using our seletected bridging species (provided as a text file `species_ipp.txt') using 10 cores:
 
 ```bash
-uv run python compute_alignments/orchestrator.py -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
+uv run python src/align/orchestrator.py -s ./species_ipp.txt -r mm39 -q galGal6 -c -d ./outdir -@ 10
 ```
 
 Computing these large alignment files is time- and resource- consuming. We recommend running the pipeline on a large computing server with multi-core processing. 

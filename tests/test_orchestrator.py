@@ -7,11 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from compute_alignments import orchestrator as orch
+
+from align import orchestrator as orch
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ORCHESTRATOR_SCRIPT = REPO_ROOT / "compute_alignments" / "orchestrator.py"
+ORCHESTRATOR_SCRIPT = REPO_ROOT / "src" / "align" / "orchestrator.py"
 FAKE_BIN = Path(__file__).resolve().parent / "fake_bin"
 TEST_FASTA_DIR = REPO_ROOT / "data" / "test_fasta"
 SPECIES_FILE = REPO_ROOT / "data" / "species_test.txt"
