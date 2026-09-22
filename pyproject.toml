@@ -14,7 +14,6 @@ dependencies = [
     "tqdm",
     "pyranges",
     "setuptools<81",
-    "ipykernel>=6.29.5",
 ]
 
 [tool.uv]
@@ -26,6 +25,7 @@ dev = [
     "ruff",
     "pre-commit",
     "pip>=25.1.1",
+    "ipykernel>=6.29.5",
 ]
 
 tests = [
