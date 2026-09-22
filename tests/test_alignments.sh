@@ -16,10 +16,9 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SPECIES_FILE="$REPO_ROOT/data/species_test.txt"
 TEST_OUTPUT_DIR="$REPO_ROOT/test_alignments_output"
-COMPUTE_SCRIPT="$REPO_ROOT/compute_alignments/compute_pairwise_alignments.sh"
+ORCHESTRATOR_SCRIPT="$REPO_ROOT/compute_alignments/orchestrator.py"
 NTHREADS="${NTHREADS:-2}"
 MAX_MEMORY_GB="${MAX_MEMORY_GB:-8}"
-MAX_MEMORY_GB="${MAX_MEMORY_GB:-8}" 
 
 # Required tools
 REQUIRED_TOOLS=(
@@ -31,8 +30,6 @@ REQUIRED_TOOLS=(
     "maf-convert"
     "faToTwoBit"
     "twoBitInfo"
-    "snakemake"
-    "sem"
     "wget"
     "gzip"
 )
@@ -143,9 +140,9 @@ fi
 
 # Run the pipeline with pwaln collection creation
 # Use nice to lower priority and prevent system freeze
-print_info "Running: nice -n $NICE_LEVEL $COMPUTE_SCRIPT -s $SPECIES_FILE -r $FIRST_SPECIES -q $SECOND_SPECIES -c -d $TEST_OUTPUT_DIR -@ $NTHREADS"
+print_info "Running: nice -n $NICE_LEVEL uv run python $ORCHESTRATOR_SCRIPT -s $SPECIES_FILE -r $FIRST_SPECIES -q $SECOND_SPECIES -c -d $TEST_OUTPUT_DIR -@ $NTHREADS"
 
-if ! nice -n $NICE_LEVEL bash "$COMPUTE_SCRIPT" \
+if ! nice -n $NICE_LEVEL uv run python "$ORCHESTRATOR_SCRIPT" \
     -s "$SPECIES_FILE" \
     -r "$FIRST_SPECIES" \
     -q "$SECOND_SPECIES" \
