@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -495,7 +495,6 @@ name = "ipp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "ipykernel" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
@@ -509,6 +508,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ipykernel" },
     { name = "pip" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -520,7 +520,6 @@ tests = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pulp", specifier = "==2.7.0" },
@@ -533,6 +532,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "pip", specifier = ">=25.1.1" },
     { name = "pre-commit" },
     { name = "pytest" },
